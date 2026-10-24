@@ -508,7 +508,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <h3>Special-power items</h3>
       <p>A magic cane turns up on 1 board in 5 and a treasure box on about 1 in 7, but never both on the same board. Separately, about 1 board in 7 gets a potion, umbrella or bubble gum, with or without a cane or box. When a board has one, it appears on a ledge once, 5 to 17 seconds into the round, for 10 seconds. Fruit and the other basic items can show up on any board.</p>
       <ul class="powers">
-        <li><img data-sprite="treat-8" alt=""><div><b>Magic Cane</b><p>When the round ends, every bubble still floating turns into a surprise prize, and a giant one a third of the screen wide drops to the bottom. The prize is usually a food (strawberry, peach, banana, pepper, cake, shaved ice or grapes), sometimes a diamond. The giant food is worth 10,000 (strawberry) up to 30,000 (grapes): strawberry 10,000, peach 12,000, banana 15,000, pepper 18,000, cake 22,000, shaved ice 26,000, grapes 30,000. Each small one is worth a tenth of its giant. Leave plenty of bubbles floating!</p></div></li>
+        <li><img data-sprite="treat-8" alt=""><div><b>Magic Cane</b><p>When the round ends, every bubble still floating turns into a surprise prize, and a giant one a third of the screen wide drops to the bottom. The prize is usually a food (strawberry, peach, banana, pepper, cake, shaved ice or grapes), sometimes a diamond. The giant food is worth 10,000 (strawberry, peach), 20,000 (banana, pepper) or 30,000 (cake, shaved ice, grapes). Each small one is worth a tenth of its giant. Leave plenty of bubbles floating!</p></div></li>
         <li><img data-sprite="treat-7" alt=""><div><b>Treasure Box</b><p>Comes in five colors. When the round ends, every bubble still floating turns into a diamond in the box's color, and a giant diamond in the same color drops to the bottom. A giant gold diamond is worth 70,000, red 60,000, magenta 50,000, blue 40,000 and green 30,000. Each small one is worth a tenth of its giant (gold 7,000 down to green 3,000).</p></div></li>
         <li><img data-sprite="treat-5" alt=""><div><b>Potion</b><p>Every critter vanishes and clovers fill the top half of the screen. Grab as many as you can in 15 seconds. Getting them all adds up to 40,000 pts, enough for two extra dinos.</p></div></li>
         <li><img data-sprite="power-12" alt=""><div><b>Umbrella</b><p>Every critter vanishes and you warp ahead, skipping the next 3 rounds (round 5 takes you to round 9).</p></div></li>
@@ -854,7 +854,7 @@ const BIG_DIAMOND_SRC=cutWH('bonus',288,344,32,32);
 const BIG_GEMS=GEM_PAL.map(pal=>recolorGem(BIG_DIAMOND_SRC,pal));
 // what the big end-of-round prizes are worth; each small copy in the shower is worth a tenth
 const GEM_BIG_PTS=[50000,70000,60000,40000,30000];   // magenta, yellow (gold), red, blue, green diamonds
-const FOOD_BIG_PTS=[10000,12000,15000,18000,22000,26000,30000];   // strawberry, peach, banana, pepper, cake, shaved ice, grapes
+const FOOD_BIG_PTS=[10000,10000,20000,20000,30000,30000,30000];   // strawberry, peach, banana, pepper, cake, shaved ice, grapes
 const bigPts=g=>g.bk==='g'?GEM_BIG_PTS[g.bi]||30000:FOOD_BIG_PTS[g.bi]||10000;
 const BIG_PTS=10000,BIGW=Math.round(LW/3),BIGX=Math.round((LW-BIGW)/2),BIG_FLOOR=224-BIGW;
 
