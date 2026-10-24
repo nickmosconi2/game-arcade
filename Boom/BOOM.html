@@ -1204,8 +1204,8 @@ function drawField(){
   for(const t of tele)dr(TELE[(frame>>3)%8],OX+t.c*TS,OY+t.r*TS);
   {const now=performance.now();for(const co of coins){
     if(!co.got){dr(COIN[0],OX+co.c*TS,OY+co.r*TS);continue;}   // waiting to be picked up: face forward, still
-    const a=co.spin?(now-co.spin)/2000:1;if(a>=1)continue;      // just picked up: spins for 2 seconds, rising and fading
-    ctx.save();ctx.globalAlpha=a<0.7?1:1-(a-0.7)/0.3;dr(COIN[Math.floor((now-co.spin)/45)%10],OX+co.c*TS,OY+co.r*TS-Math.round(a*12));ctx.restore();}}
+    const a=co.spin?(now-co.spin)/2000:1;if(a>=1)continue;      // just picked up: spins in place for 2 seconds, then fades
+    ctx.save();ctx.globalAlpha=a<0.7?1:1-(a-0.7)/0.3;dr(COIN[Math.floor((now-co.spin)/45)%10],OX+co.c*TS,OY+co.r*TS);ctx.restore();}}
   for(const it of items){if(it.t<180&&(frame>>2)%2)continue;dr(BONUS_SPR[it.type],OX+it.c*TS,OY+it.r*TS);}
   for(const l of letters){if(l.t<180&&(frame>>2)%2)continue;dr(LETTER_SPR[l.l],OX+l.c*TS,OY+l.r*TS+Math.round(Math.sin(frame*0.1)));}
   for(const b of bombs){   // a bomb sits still, and only starts to pulse in its last second
