@@ -1,6 +1,15 @@
 /* The games in this Arcade, one folder each. Claude adds an entry here for every new game.
    file and pictures are paths from this folder. color is the backdrop behind the game's pictures. */
 window.ARCADE_GAMES=[
+  {id:'noggin',
+   name:'Noggin Knock',
+   file:'Bonkheads/Noggin Knock.html',
+   thumb:'Bonkheads/thumb.png',
+   shots:['Bonkheads/shot1.png','Bonkheads/shot2.png'],
+   color:'#ff6f91',
+   players:'1–2 players (4-player preview)',
+   online:true,
+   about:'Bonk critters from below and kick them away across 144 single-screen levels, with springs, ladders, THUMP blocks and a boss every sixth level.'},
   {id:'hoops64',
    name:'Hoops 64',
    file:'Hoops 64/Hoops 64.html',
