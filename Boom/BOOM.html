@@ -507,7 +507,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=16;   // goes up by one with every update
+const GAME_BUILD=18;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
@@ -675,11 +675,11 @@ const BLOB={walk:[[[0,0],[0,1],[0,2],[0,3]],[[0,4],[0,5],[0,6],[0,7]],[[1,3],[1,
 const EN={
   grunt:  {name:'Green Cap', tpl:'soldier',pal:{a:'#5aa04a',b:'#3a6a2a',c:'#e0a060'},ai:'random', spd:1,  shot:'pellet',cd:150,pts:100,desc:'A ginger-bearded tough in a green cap. Wanders about and shoots when it sees you.'},
   imp:    {name:'Leaf Tiki',  tpl:'imp',    pal:{a:'#3a9a3a',b:'#1a4a8a',c:'#ff9a2a'},ai:'forward',spd:1,  shot:'orb',  cd:150,pts:250,desc:'A walking tiki with a crown of leaves. Marches until it hits a wall and spits purple orbs.'},
-  sarge:  {name:'Gunman',     tpl:'soldier',pal:{a:'#e0a0a0',b:'#8a8a8a',c:'#ffb04a'},ai:'random', spd:1,  shot:'pellet',cd:90, pts:200,desc:'A grey-haired gunman. Fires down any row or column you step into.'},
+  sarge:  {name:'Gunman',     tpl:'soldier',pal:{a:'#e0a0a0',b:'#8a8a8a',c:'#ffb04a'},ai:'random', spd:1,  shot:'burst', cd:150,pts:200,burst:3,desc:'A grey-haired army man with a machine gun. Fires bursts of three down any row or column you step into.'},
   charger:{name:'Beast',      tpl:'bull',   pal:{a:'#e05a4a',b:'#8a2a22',c:'#ffd0dd'},ai:'haunt',  spd:1.4,shot:null,   cd:0,  pts:250,contact:2,desc:'A hunched, tusked beast. Charges the moment you line up with it.'},
-  gunner: {name:'Shades',     tpl:'soldier',pal:{a:'#f0c040',b:'#2a2a2a',c:'#ffe066'},ai:'forward',spd:1,  shot:'burst', cd:150,pts:300,burst:3,desc:'Sunglasses and a quick trigger: fires a burst of three shots.'},
+  gunner: {name:'Shades',     tpl:'soldier',pal:{a:'#f0c040',b:'#2a2a2a',c:'#ffe066'},ai:'forward',spd:1,  shot:'slow',  cd:150,pts:300,desc:'Sunglasses and a steady aim: fires one slow shot at a time.'},
   hound:  {name:'Pink Brute', tpl:'hound',  pal:{a:'#f0a0b0',b:'#a05060',c:'#ff8a2a'},ai:'follow', spd:1,  shot:'flame', cd:70, pts:400,desc:'A bald brute with a flamethrower. Hunts you down and burns you at close range.'},
-  flamer: {name:'Golem',      tpl:'imp',    pal:{a:'#d8a030',b:'#8a5a14',c:'#ffe27a'},ai:'follow', spd:0.9,shot:'fireball',cd:190,pts:300,fade:true,desc:'A gold golem that fades in and out of sight. Follows you and lobs slow fireballs.'},
+  flamer: {name:'Golem',      tpl:'imp',    pal:{a:'#d8a030',b:'#8a5a14',c:'#ffe27a'},ai:'follow', spd:0.9,shot:'fireball',cd:190,pts:300,desc:'A molten gold golem. Follows you and lobs slow fireballs.'},
   ghost:  {name:'Wraith',     tpl:'ghost',  pal:{a:'#d8e6ff',b:'#9fb4d8'},ai:'dash',spd:1,shot:null,cd:0,pts:400,contact:2,ghost:true,desc:'A hooded ghost with red eyes. Drifts straight through walls to reach you.'},
   skull:  {name:'Pod Walker', tpl:'skull',  pal:{a:'#efe6d2',b:'#b8ab8f',c:'#5ad0ff'},ai:'follow', spd:1.2,shot:'blue',  cd:80, pts:500,desc:'An alien in a glass dome on robot legs. It follows you and shoots often.'},
   giggler:{name:'Orange Alien',tpl:'imp',   pal:{a:'#ff8a2a',b:'#a8461a',c:'#ffe066',h:'#ffe066'},ai:'follow',spd:1.6,shot:'wave',cd:200,pts:600,desc:'Fast and grinning. Only found in the last world, where it fires big wobbling waves.'}};
@@ -738,7 +738,7 @@ const TELE=[...Array(8)].map((_,f)=>cell('tele',0,f));
 const BOSS_SPR=[0,1,2,3,4,5,6].map(w=>{const c=mk(96,96);c.getContext('2d').drawImage(IMG['boss'+w],0,0);return c;}),BOSS_WHITE=BOSS_SPR.map(whiten);
 const BOSS2=[1,0,2,3].map(row=>[0,1,2,3].map(f=>cut('boss7',f*160,row*160,160,160)));   // the final boss, by direction
 const BOSS2_WHITE=BOSS2.map(d=>whiten(d[0]));
-const SHOT_SPR={pellet:[cell('eatk',0,1),cell('eatk',0,2)],fireball:[cell('eatk',1,0)],burst:[cell('eatk',2,0),cell('eatk',2,1)],orb:[cell('eatk',3,0)],
+const SHOT_SPR={pellet:[cell('eatk',0,1),cell('eatk',0,2)],slow:[cell('eatk',2,0),cell('eatk',2,1)],fireball:[cell('eatk',1,0)],burst:[cell('eatk',2,0),cell('eatk',2,1)],orb:[cell('eatk',3,0)],
   flame:[0,1,2,3,4].map(f=>cell('eatk',4,f)),blue:[cell('eatk',5,0),cell('eatk',5,1)],wave:[cell('eatk',6,0),cell('eatk',6,1)],boss:[cell('batk',0,0),cell('batk',0,1)]};
 const BONUS={   // type: [name, colour, description]
   bombs:['Extra Bomb','#3a3a44','You can have one more bomb out at a time (up to 8).'],
@@ -952,7 +952,7 @@ function updatePlayer(p){
   if(inp.bombP||inp.bomb){inp.bombP=false;dropBomb(p);}   // hold the button to keep laying bombs as you move
   const [c,r]=cellAt(p.x,p.y);
   // pick-ups
-  for(const co of coins)if(!co.got&&co.c===c&&co.r===r){co.got=true;addScore(p,100,co.c*TS+8+OX,co.r*TS+OY);sfx('coin');
+  for(const co of coins)if(!co.got&&co.c===c&&co.r===r){co.got=true;co.spin=performance.now();addScore(p,100,co.c*TS+8+OX,co.r*TS+OY);sfx('coin');
     if(coins.every(k=>k.got)&&enemies.some(e=>!e.dead)&&!extraT)startExtra();}
   for(const it of items)if(!it.dead&&it.c===c&&it.r===r){it.dead=true;takeBonus(p,it.type);}
   for(const l of letters)if(!l.dead&&l.c===c&&l.r===r){l.dead=true;p.letters[l.l]=1;sfx('letter');addText(l.c*TS+8+OX,l.r*TS+OY,LETTERS[l.l],LETTER_COL[l.l],50);
@@ -1014,18 +1014,21 @@ function explode(b){
       if(!inB(c,r)||grid[r][c]==='#')break;
       const bh=bossAt(c,r);if(bh){if(!b.hitB)b.hitB=new Set();if(!b.hitB.has(bh)){b.hitB.add(bh);hitBoss(owner,1,bh);}break;}
       const end=s===b.range;
-      if(grid[r][c]==='%'){crackCrate(c,r,b.owner,false);Object.assign(flames[flames.length-1],{id,d:s});sfx('crate');break;}
+      if(grid[r][c]==='%'){crackCrate(c,r,b.owner,true);Object.assign(flames[flames.length-1],{id,d:s});sfx('crate');break;}   // the blast stops at the crate: it cracks but burns nothing
       const ob=bombAt(c,r);if(ob&&!ob.done)ob.t=Math.min(ob.t,4);
       const it=items.find(i=>!i.dead&&i.c===c&&i.r===r&&!i.born);if(it){it.dead=true;add(c,r,end?'e'+kh+(dc+dr>0?'+':'-'):kh,s);break;}
       add(c,r,end?'e'+kh+(dc+dr>0?'+':'-'):kh,s);}}
   bombs=bombs.filter(x=>x!==b);sfx('boom');}
 function pickBonus(){let t=BONUS_W.reduce((a,b)=>a+b,0)*Math.random();for(let k=0;k<BONUS_KEYS.length;k++){t-=BONUS_W[k];if(t<=0)return BONUS_KEYS[k];}return 'heart';}
 function updateBombs(){for(const b of bombs.slice())if(--b.t<=0)explode(b);}
+function inFlame(a,f,box){   // nothing gets hit through a wall or crate
+  if(!overlap(a,box,4))return false;const [c,r]=cellAt(a.x,a.y);if(c===f.c&&r===f.r)return true;
+  if(c!==f.c&&r!==f.r)return false;if(!inB(c,r))return false;const g=grid[r][c];return g!=='#'&&g!=='%';}
 function updateFlames(){
   for(const f of flames){f.t--;if(f.t<6||f.safe)continue;   // lightning-cracked crates don't burn anyone
     const fx=f.c*TS,fy=f.r*TS,box={x:fx,y:fy};
-    for(const p of players)if(!p.dead&&!p.out&&overlap(p,box,4))hurt(p,Math.max(2,8-2*(f.d||0)));   // closer to the bomb hurts more
-    for(const e of enemies)if(!e.dead&&overlap(e,box,4))killEnemy(e,pById(f.owner));}
+    for(const p of players)if(!p.dead&&!p.out&&inFlame(p,f,box))hurt(p,Math.max(2,8-2*(f.d||0)));   // closer to the bomb hurts more
+    for(const e of enemies)if(!e.dead&&inFlame(e,f,box))killEnemy(e,pById(f.owner));}
   flames=flames.filter(f=>f.t>0);}
 
 /* ---------- aliens ---------- */
@@ -1073,7 +1076,7 @@ function updateEnemy(e){
   // bites
   if(!e.morph)for(const p of alive())if(overlap(e,p,4))hurt(p,e.charge?4:(d.contact||1));
 }
-const SHOT_DEF={pellet:{spd:2.2,dmg:2,r:2,col:'#ffb04a',s:'shot'},fireball:{spd:1.5,dmg:3,r:4,col:'#ff6a2a',s:'fireball'},burst:{spd:2.6,dmg:1,r:2,col:'#ffe066',s:'shot'},
+const SHOT_DEF={pellet:{spd:2.2,dmg:2,r:2,col:'#ffb04a',s:'shot'},slow:{spd:1.5,dmg:2,r:2,col:'#ffe066',s:'shot'},fireball:{spd:1.5,dmg:3,r:4,col:'#ff6a2a',s:'fireball'},burst:{spd:2.6,dmg:1,r:2,col:'#ffe066',s:'shot'},
   orb:{spd:1.8,dmg:2,r:3,col:'#b06aff',s:'shot'},flame:{spd:2.4,dmg:2,r:4,col:'#ff8a2a',s:'flame',life:28},blue:{spd:2.1,dmg:2,r:3,col:'#5ad0ff',s:'shot'},
   wave:{spd:1.2,dmg:3,r:5,col:'#ff6ad8',s:'fireball'},boss:{spd:1.6,dmg:3,r:4,col:'#ff4a8a',s:'fireball'}};
 const SHOT_KEYS=Object.keys(SHOT_DEF);
@@ -1180,12 +1183,18 @@ function drawEnemy(e){const s=ESPR[e.type],x=Math.round(OX+e.x),y=Math.round(OY+
   if(EN[e.type].fade&&!e.morph)ctx.globalAlpha=0.3+0.6*(0.5+0.5*Math.sin(e.anim*0.05));
   dr(img,x,y+bob);ctx.globalAlpha=1;
 }
+const GLOW=new WeakMap();
+function glowOf(img){   // a soft yellow copy of a sprite's shape, drawn just around it for the shield
+  let g=GLOW.get(img);if(g)return g;g=document.createElement('canvas');g.width=img.width;g.height=img.height;const c=g.getContext('2d');
+  c.drawImage(img,0,0);c.globalCompositeOperation='source-in';c.fillStyle='#ffd84a';c.fillRect(0,0,g.width,g.height);GLOW.set(img,g);return g;}
 function drawPlayer(p){if(p.out)return;const x=Math.round(OX+p.x),y=Math.round(OY+p.y),X=HERO_X[p.id];
   if(p.dead){if(p.deadT>100){ctx.globalAlpha=Math.min(1,(p.deadT-100)/30);dr(X.fall[Math.min(2,(150-p.deadT)>>3)],x,y);ctx.globalAlpha=1;}return;}
   if(p.dmgT>0&&(frame>>2)%2)return;
   const img=p.dmgT>40?X.hurt:state==='clear'?X.win:HERO[p.id][p.dir][p.anim?(p.anim>>2)%8:0];
+  if(p.shield>0&&(p.shield>120||(frame>>2)%2)){   // shield: a soft yellow glow around the marine (blinks in its last 2 seconds)
+    const g=glowOf(img);ctx.save();ctx.globalAlpha=0.45+0.15*Math.sin(frame*0.15);
+    for(const [ox,oy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]])dr(g,x+ox,y+oy);ctx.restore();}
   dr(img,x,y);
-  if(p.shield>0&&(p.shield>120||(frame>>2)%2)){ctx.strokeStyle=(frame>>3)%2?'rgba(120,240,255,.9)':'rgba(255,255,255,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+8,y+8,10,0,7);ctx.stroke();}
   if(p.speedy>0&&frame%4===0)parts.push({x:x+8,y:y+14,vx:0,vy:0,t:10,col:'#ffe066'});
   if(players.length>1)txt(String(p.id+1),x+8,y-8,5,PCOL[p.id].name,'center','#000',2);}
 function drawField(){
@@ -1193,7 +1202,10 @@ function drawField(){
   ctx.drawImage(levelCanvas,0,0,LW,LH);
   for(let r=0;r<GH;r++)for(let c=0;c<GW;c++)if(grid[r][c]==='%')dr(CRATE[w],OX+c*TS,OY+r*TS);
   for(const t of tele)dr(TELE[(frame>>3)%8],OX+t.c*TS,OY+t.r*TS);
-  for(const co of coins)if(!co.got)dr(COIN[((frame>>2)+co.c)%10],OX+co.c*TS,OY+co.r*TS);
+  {const now=performance.now();for(const co of coins){
+    if(!co.got){dr(COIN[0],OX+co.c*TS,OY+co.r*TS);continue;}   // waiting to be picked up: face forward, still
+    const a=co.spin?(now-co.spin)/2000:1;if(a>=1)continue;      // just picked up: spins for 2 seconds, rising and fading
+    ctx.save();ctx.globalAlpha=a<0.7?1:1-(a-0.7)/0.3;dr(COIN[Math.floor((now-co.spin)/45)%10],OX+co.c*TS,OY+co.r*TS-Math.round(a*12));ctx.restore();}}
   for(const it of items){if(it.t<180&&(frame>>2)%2)continue;dr(BONUS_SPR[it.type],OX+it.c*TS,OY+it.r*TS);}
   for(const l of letters){if(l.t<180&&(frame>>2)%2)continue;dr(LETTER_SPR[l.l],OX+l.c*TS,OY+l.r*TS+Math.round(Math.sin(frame*0.1)));}
   for(const b of bombs){   // a bomb sits still, and only starts to pulse in its last second
@@ -1342,7 +1354,7 @@ function applySnap(s){
   enemies=s.E.map(a=>({type:TYPES[a[0]],x:a[1],y:a[2],dir:a[3],anim:a[4],dead:!!a[5],deadT:a[6],morph:!!a[7],block:a[8]}));
   bombs=s.B.map(a=>({c:a[0],r:a[1],t:a[2]}));flames=s.F.map(a=>({c:a[0],r:a[1],k:a[2],t:a[3]}));
   shots=s.S.map(a=>({x:a[0],y:a[1],k:SHOT_KEYS[a[2]]}));items=s.I.map(a=>({c:a[0],r:a[1],type:BONUS_KEYS[a[2]],t:a[3]}));
-  if(coins.length===s.C.length)coins.forEach((c,k)=>c.got=s.C[k]==='1');
+  if(coins.length===s.C.length)coins.forEach((c,k)=>{const g=s.C[k]==='1';if(g&&!c.got)c.spin=performance.now();c.got=g;});
   letters=s.L.map(a=>({c:a[0],r:a[1],l:a[2],t:a[3]}));texts=s.X.map(a=>({s:a[0],x:a[1],y:a[2],col:a[3],t:a[4]}));zaps=s.Z.map(a=>({x1:a[0],y1:a[1],x2:a[2],y2:a[3],t:a[4]}));
   if(Array.isArray(s.Bo))s.Bo.forEach((a,k)=>{const boss=bosses[k];if(!boss)return;boss.hp=a[0];boss.maxhp=a[1];boss.t=a[2];boss.hit=a[3];boss.dead=!!a[4];boss.deadT=a[5];});
   for(const [id,n] of s.ev||[])if(id>lastEv){lastEv=id;if(!muted&&actx&&SFX[n])try{SFX[n]();}catch(e){}}
