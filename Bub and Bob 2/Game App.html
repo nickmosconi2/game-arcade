@@ -342,7 +342,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
           <button type="button" data-mode="easy" role="radio">Easy</button><button type="button" data-mode="medium" role="radio">Medium</button><button type="button" data-mode="hard" role="radio">Hard</button>
         </div>
         <div class="opthint" id="mode-hint"><span>Pick before you start. Easy: more items, fewer critters, more time before HURRY UP. Hard: the opposite.</span></div>
-        <label class="optrow optchk" for="opt-caps"><span>Captions &amp; descriptions</span><input type="checkbox" id="opt-caps" checked></label>
+        <label class="optrow optchk" for="opt-caps"><span>Captions &amp; descriptions</span><input type="checkbox" id="opt-caps"></label>
         <div class="opthint"><span>Off hides pop-up comments, round descriptions and the twist name by the round number</span></div>
       </div>
     </div>
@@ -578,7 +578,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=41;   // goes up by one with every update
+const GAME_BUILD=42;   // goes up by one with every update
 const GAME_ID='bubnbob2',GAME_NAME='Bub & Bob 2';
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
@@ -1579,7 +1579,7 @@ const MODES={easy:{name:'EASY',items:8,boards:1.5,critters:0.75,hurry:1.4},
              medium:{name:'MEDIUM',items:6,boards:1,critters:1,hurry:1},
              hard:{name:'HARD',items:3,boards:0.5,critters:1.3,hurry:0.7}};
 const MODE_KEYS=['easy','medium','hard'];
-let mode=MODES[load('fizzpop.mode','medium')]?load('fizzpop.mode','medium'):'medium';
+let mode='medium';   // every game starts on Medium; Options changes it for this visit
 let playMode=mode;   // the difficulty locked in when the current game started
 const MD=()=>MODES[playMode];
 const ITEM_GAP=[40,32,26,21,17,14,11,9,7,5];   // seconds between bonus items for each setting
@@ -1679,7 +1679,7 @@ function burst(x,y,col,n){
   for(let i=0;i<n;i++){const a=i/n*Math.PI*2+Math.random()*0.3,s=1+Math.random()*1.2;
     particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:16+Math.random()*8,col});}
 }
-let captions=load('fizzpop.captions',true);   // Options > Captions & descriptions
+let captions=false;   // Options > Captions & descriptions
 const isCaption=s2=>!/^[0-9]+$/.test(String(s2));   // score numbers always show
 function addText(x,y,s,col,life){texts.push({x,y,s,col:col||'#ffd23f',t:life||60});}
 function addScore(p,n,x,y,show){

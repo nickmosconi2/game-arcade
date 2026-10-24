@@ -500,7 +500,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=2;   // goes up by one with every update
+const GAME_BUILD=3;   // goes up by one with every update
 const GAME_ID='kart64',GAME_NAME='Turbo Kart 64';
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
@@ -924,7 +924,7 @@ const RACERS=[{name:'REX',col:'#e83030'},{name:'GIL',col:'#2fae3a'},{name:'SUNNY
 const NK=RACERS.length;
 const CLASSES={50:{name:'50cc',vmax:24,ai:0.9},100:{name:'100cc',vmax:28,ai:0.95},150:{name:'150cc',vmax:32,ai:0.985}};
 const CLASS_KEYS=[50,100,150];
-let cc=CLASSES[load('cc',100)]?load('cc',100):100,playCC=cc;
+let cc=100,playCC=cc;   // every race starts on 100cc (medium); Options changes it for this visit
 // one low-poly kart (and driver) per colour; built facing +z, wheels on the ground at y=0
 const KART=RACERS.map(r=>{const m=Mesh(),c=hexC(r.col),d=shadeC(c,0.72),blk=[0.12,0.12,0.14,1],gry=[0.6,0.62,0.66,1],skin=hexC('#f2c49a');
   box(m,0,0.42,0.1,1.7,0.34,2.7,c,{tl:2.3,tz:-0.1,top:c,side:d});
