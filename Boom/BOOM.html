@@ -229,6 +229,17 @@ kbd{
 .pbtn.bomb{width:76px;height:76px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffff 0 10%,#ffcf8a 12% 55%,#e2662a 100%)}
 .netbody h4{font:700 13px var(--f-ui);margin:10px 0 4px}
 .netfriends .st{font-size:11px;color:var(--muted);display:block}
+.netfriends{max-height:230px;overflow:auto}
+.netfriends li{display:block;padding:0}
+.netfriends .nf{display:flex;align-items:center;gap:8px;width:100%;padding:5px 4px;background:none;border:0;border-radius:4px;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.netfriends .nf:hover:not(:disabled),.netfriends .nf:focus-visible{background:rgba(0,0,0,.09)}
+.netfriends .nf:disabled{cursor:default;opacity:.62}
+.netfriends .nf i{width:9px;height:9px;border-radius:50%;flex:none;border:1px solid rgba(0,0,0,.45)}
+.netfriends .nf>span{flex:1;min-width:0}
+.netfriends .nf b{display:block}
+.netfriends .nf em{font:700 12px var(--f-ui);font-style:normal;padding:2px 10px;border:1px solid #000;border-radius:6px;background:linear-gradient(#fff,#d4d4d4);box-shadow:0 1px 0 #666;white-space:nowrap}
+.netfriends .nf em:empty{display:none}
+.netfriends li.sub{font:700 10.5px var(--f-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);padding:8px 4px 2px;border:0}
 .mycode{font:700 18px var(--f-ui);letter-spacing:.14em;user-select:all}
 .seats{list-style:none;margin:0 0 8px;padding:0;font:500 13px var(--f-ui)}
 .seats li{padding:2px 0;display:flex;gap:8px;align-items:center}
@@ -237,6 +248,97 @@ kbd{
 #net-join{display:flex;gap:8px;margin:6px 0 10px}
 #net-input{font-size:18px}
 </style>
+<!-- ===== ARCADE GAME SKIN v1 (from "Online Kit/arcade-game-skin.html"; keep every copy identical except --ar) =====
+     Gives a game page the Arcade's look: dark neon, a slim top bar with "Arcade" and "How to play", the game as big as the
+     window allows, and the Read Me as a drop-down. Paste just before <header class="menubar">, set --ar to the game's
+     width / height, and the script part at the very end of the page. -->
+<style id="arcade-skin">
+:root{--ar:1.3333;
+  --a-bg:#04060d;--a-ink:#e6f6ff;--a-muted:#8aa2bd;--a-cy:#29e7ff;--a-or:#ff8a1f;--a-panel:rgba(8,16,30,.92);--a-edge:rgba(41,231,255,.38);
+  --a-glow:0 0 6px rgba(41,231,255,.75),0 0 22px rgba(41,231,255,.35);
+  --f-ui:"Lexend","Segoe UI",system-ui,-apple-system,sans-serif;--muted:var(--a-muted);color-scheme:dark}
+html,body{margin:0}
+body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transparent 60%),radial-gradient(60% 40% at 85% 0%,rgba(179,123,255,.12),transparent 70%),var(--a-bg) fixed;
+  color:var(--a-ink);font-family:var(--f-ui)}
+:focus-visible{outline:2px solid var(--a-cy);outline-offset:2px}
+/* top bar */
+.menubar{height:46px;background:rgba(4,8,16,.86);border-bottom:1px solid var(--a-edge);box-shadow:0 0 24px rgba(41,231,255,.12);font:600 14px var(--f-ui);color:var(--a-ink);backdrop-filter:blur(6px)}
+.menubar .logo{display:none}
+.mbtn{color:var(--a-ink);letter-spacing:.06em;text-transform:uppercase;font-size:12.5px;padding:0 12px;cursor:pointer;border-radius:0}
+.mbtn:hover,.mbtn[aria-expanded="true"]{background:rgba(41,231,255,.14);color:var(--a-cy)}
+.drop{background:#07101e;border:1px solid var(--a-cy);box-shadow:0 0 30px rgba(41,231,255,.25);color:var(--a-ink);padding:6px 0}
+.drop button{font:500 14px var(--f-ui);color:var(--a-ink);cursor:pointer}
+.drop button:hover,.drop button:focus-visible{background:rgba(41,231,255,.14);color:var(--a-cy)}
+.drop hr{border:0;border-top:1px solid rgba(41,231,255,.18)}
+.drop .k{color:var(--a-muted)}
+.optrow,.opthint,.modes{color:var(--a-ink)}.modes button{background:rgba(41,231,255,.06);border:1px solid var(--a-edge);color:var(--a-ink)}
+.modes button[aria-checked="true"]{background:var(--a-cy);color:#02121a}
+.clock{display:none}
+.a-right{display:flex;align-items:center;gap:8px}
+.a-btn{border:1px solid var(--a-edge);background:rgba(41,231,255,.08);color:var(--a-cy);padding:6px 14px;font:700 11.5px var(--f-ui);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+.a-btn:hover,.a-btn[aria-expanded="true"]{background:rgba(41,231,255,.2)}
+.a-btn.home{color:var(--a-ink);border-color:transparent;background:none;padding-left:4px}
+.a-btn.home::before{content:"‹ ";color:var(--a-cy)}
+#cmd-arcade,#hr-arcade{display:none!important}
+.menu:has(#mb-help){display:none}   /* "How to play" replaces the Help menu */
+@media (max-width:560px){.mbtn{padding:0 7px;font-size:11px;letter-spacing:.03em}.a-btn{padding:5px 9px;font-size:10.5px;letter-spacing:.08em}.menubar{padding-left:8px;padding-right:8px}}
+/* the game: as big as the window allows */
+.desk{display:block;padding:10px 16px 20px}
+.game-win,.desk:has(#readme[hidden]) .game-win,.desk:has(#readme:not([hidden])) .game-win{
+  width:min(calc(100vw - 32px),calc((100dvh - 100px)*var(--ar)));min-width:0;margin:0 auto;flex:none}
+.gamebar{display:none!important}
+@media (pointer:coarse){.game-win,.desk:has(#readme[hidden]) .game-win{width:min(calc(100vw - 20px),calc((100dvh - 210px)*var(--ar)))}.desk{padding:8px 10px 16px}}
+.win{background:transparent;border:0;box-shadow:none}
+.game-win .titlebar{height:30px;padding:0 2px}
+.game-win .stripes,.game-win .titlebar span.box{display:none}
+.game-win .ttl{font:800 13px var(--f-ui);letter-spacing:.22em;text-transform:uppercase;color:var(--a-cy);text-shadow:var(--a-glow);padding:0;flex:1}
+.game-win .box.zoom{width:auto;height:auto;border:0;background:none;box-shadow:none;color:var(--a-muted);font:600 12px var(--f-ui);letter-spacing:.1em;cursor:pointer}
+.game-win .box.zoom::after{content:"⛶  FULL SCREEN";position:static;border:0;width:auto;height:auto}
+.game-win .box.zoom:hover{color:var(--a-cy)}
+.win-body{padding:0}
+.screen-wrap{border:1px solid var(--a-edge);box-shadow:0 0 0 1px rgba(41,231,255,.15),0 0 40px rgba(41,231,255,.18);background:#000}
+.gamebar{padding-top:8px}.gamebar .hint{color:var(--a-muted);font-size:12.5px}
+.fsbtn{background:rgba(41,231,255,.08);border:1px solid var(--a-edge);color:var(--a-cy);border-radius:0;box-shadow:none;font:700 12px var(--f-ui);letter-spacing:.14em;text-transform:uppercase;padding:7px 14px}
+.fsbtn:hover{background:rgba(41,231,255,.2)}.fsbtn:active{transform:translateY(1px);box-shadow:none}
+.pbtn{background:rgba(41,231,255,.1);border:1px solid var(--a-edge);color:var(--a-ink);box-shadow:0 0 12px rgba(41,231,255,.15)}
+.pbtn.active{background:rgba(41,231,255,.3)}
+/* Read Me: a drop-down from "How to play" */
+.readme{position:fixed;z-index:40;top:52px;right:12px;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 66px);overflow:auto;min-width:0!important;
+  background:var(--a-panel)!important;border:1px solid var(--a-cy)!important;box-shadow:0 0 40px rgba(41,231,255,.25)!important;backdrop-filter:blur(8px)}
+.readme .titlebar{position:sticky;top:0;background:#07101e;height:38px;padding:0 10px 0 16px;border-bottom:1px solid rgba(41,231,255,.18);z-index:1}
+.readme .stripes{display:none}
+.readme .ttl{order:1;flex:1;font:800 12px var(--f-ui);letter-spacing:.24em;text-transform:uppercase;color:var(--a-cy);text-shadow:var(--a-glow);padding:0}
+.readme #readme-close{order:2;width:auto;height:auto;border:0;background:none;box-shadow:none;color:var(--a-muted);font:600 20px/1 var(--f-ui);cursor:pointer}
+.readme #readme-close::after{content:"×"}
+.readme #readme-close:hover{color:var(--a-ink)}
+.doc{background:transparent!important;color:var(--a-ink)!important;border:0!important;margin:0!important;columns:auto!important;font-family:var(--f-ui)!important}
+.doc h2{color:#fff}.doc h3{color:var(--a-cy);text-transform:uppercase;letter-spacing:.12em;font-size:12px!important}
+.doc .ver,.doc small{color:var(--a-muted)!important}
+.doc kbd{background:rgba(41,231,255,.1)!important;border:1px solid var(--a-edge)!important;color:var(--a-ink)!important;box-shadow:none!important;border-radius:3px}
+.doc table,.doc td,.doc th{border-color:rgba(41,231,255,.18)!important;color:var(--a-ink)}
+.doc a{color:var(--a-cy)}
+/* online panel */
+.netdlg{background:rgba(2,6,12,.6)}
+.netbox{background:#07101e!important;border:1px solid var(--a-cy)!important;box-shadow:0 0 40px rgba(41,231,255,.3)!important;color:var(--a-ink)}
+.netbox .titlebar{background:none;border-bottom:1px solid rgba(41,231,255,.18);height:36px}
+.netbox .stripes{display:none}
+.netbox .ttl{font:800 12px var(--f-ui);letter-spacing:.24em;text-transform:uppercase;color:var(--a-cy);text-shadow:var(--a-glow);margin:0 auto}
+.netbody{color:var(--a-ink);font-family:var(--f-ui);background:transparent!important;border:0!important;margin:0!important}
+.netbody .st,.netbody small{color:var(--a-muted)!important}
+.netbody h4{color:var(--a-cy);text-transform:uppercase;letter-spacing:.16em;font-size:11px!important}
+.nbtn,.netfriends .nf em{background:rgba(41,231,255,.1)!important;border:1px solid var(--a-edge)!important;color:var(--a-cy)!important;border-radius:0!important;box-shadow:none!important;
+  font:700 12px var(--f-ui)!important;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.nbtn:hover{background:rgba(41,231,255,.22)!important}
+#net-go,#net-start{background:var(--a-or)!important;border-color:var(--a-or)!important;color:#1a0a00!important;box-shadow:0 0 16px rgba(255,138,31,.5)!important}
+.netfriends li{border-color:rgba(41,231,255,.12)!important}
+.netfriends .nf:hover:not(:disabled),.netfriends .nf:focus-visible{background:rgba(41,231,255,.1)!important}
+.netfriends .nf i{border-color:transparent!important;box-shadow:0 0 8px currentColor}
+#net-input,.netbody input{background:rgba(2,8,16,.8)!important;border:1px solid var(--a-edge)!important;color:var(--a-cy)!important;border-radius:0!important;letter-spacing:.16em}
+.mycode{color:var(--a-cy)}
+.codeline{font-size:11.5px!important;color:var(--a-muted)}.codeline .mycode{font-size:12px!important;letter-spacing:.12em}
+.seats li{color:var(--a-ink)}
+</style>
+<!-- ===== end of ARCADE GAME SKIN (style part) ===== -->
 <header class="menubar">
   <nav class="mb-left" aria-label="Menu bar">
     <span class="logo" aria-hidden="true" style="background:radial-gradient(circle at 34% 32%,#fff 0 14%,transparent 16%),radial-gradient(circle at 50% 50%,#3a3a3a 0 55%,#111 58% 68%,transparent 70%)"></span>
@@ -277,7 +379,7 @@ kbd{
     <div class="menu">
       <button class="mbtn" id="mb-help" aria-haspopup="true" aria-expanded="false">Help</button>
       <div class="drop" hidden>
-        <button data-cmd="readme">Show Read Me</button>
+        <button data-cmd="readme">How to Play</button>
       </div>
     </div>
   </nav>
@@ -307,8 +409,8 @@ kbd{
             <div id="net-seats-wrap" hidden><h4>Players</h4><ul class="seats" id="net-seats"></ul>
               <div class="netrow"><button class="nbtn" id="net-start">Start game</button></div></div>
             <div id="net-lobby">
-              <p>Your friend code: <span class="mycode" id="net-mycode"></span></p>
-              <h4>Friends online</h4>
+              <p class="codeline">Your friend code: <span class="mycode" id="net-mycode"></span></p>
+              <h4>Players: click a name to play</h4>
               <ul class="netfriends" id="net-friends"></ul>
               <form id="net-join" autocomplete="off">
                 <input id="net-input" maxlength="6" placeholder="FRIEND CODE" spellcheck="false" aria-label="Friend code to join">
@@ -340,7 +442,7 @@ kbd{
     </div>
   </section>
 
-  <section class="win readme" id="readme" aria-label="Read Me">
+  <section class="win readme" id="readme" aria-label="Read Me" hidden>
     <div class="titlebar">
       <button class="box" id="readme-close" aria-label="Close Read Me"></button>
       <span class="stripes" aria-hidden="true"></span>
@@ -407,62 +509,132 @@ kbd{
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
 const GAME_BUILD=15;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
-/* ---------- Arcade presence: one friend code across the Arcade page and every game ----------
-   While a page is open it registers with the free PeerJS service as arcade-<friend code>, answers
-   "are you there?" from friends with what it's doing, asks its own friends the same every 8 seconds,
-   and passes on invites. Moving from the Arcade into a game (and back) hands the registration over. */
+/* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
+   Paste unchanged into the Arcade page and every game; every copy must stay identical.
+   One friend code across the Arcade page and every game. While a page is open it registers with the free
+   PeerJS service as arcade-<friend code>, tells friends what it's doing every 6 seconds, and passes on invites.
+   - Friends are mutual: when you add someone's code, you appear on their list too (unless they removed you).
+   - Only one tab per player can be online. The tab you're looking at takes over, unless the other tab is
+     in an online game right now.
+   - Moving from the Arcade into a game (and back) hands who you are over in the link (#arc=...). */
+const ARC_HOME='https://nickmosconi2.github.io/game-arcade/';   // the published Arcade: always the newest version
 const ARC_QS=new URLSearchParams(location.search);
-const ARC_BROKER=ARC_QS.get('broker')||'wss://0.peerjs.com:443/peerjs';
+const ARC_BROKER=ARC_QS.get('broker')||'wss://0.peerjs.com:443/peerjs';   // ?broker=ws://localhost:9000/peerjs for testing
 const ARC_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const arcRand=n=>{let s='';for(let i=0;i<n;i++)s+=ARC_CHARS[Math.floor(Math.random()*ARC_CHARS.length)];return s;};
 const arcLd=(k,d)=>{try{const v=localStorage.getItem('arcade.'+k);return v===null?d:JSON.parse(v);}catch(e){return d;}};
 const arcSv=(k,v)=>{try{localStorage.setItem('arcade.'+k,JSON.stringify(v));}catch(e){}};
-(()=>{const m=location.hash.match(/arc=([^&]+)/);if(!m)return;   // identity handed over by the Arcade page
-  try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);}catch(e){}})();
-const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),
-  seen:{},ws:null,ready:false,hb:0,tries:0,
+(()=>{const m=location.hash.match(/arc=([^&]+)/);if(!m)return;   // identity handed over by the previous page
+  try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);if(o.r)arcSv('removed',o.r);}catch(e){}
+  try{history.replaceState(null,'',location.href.split('#')[0]);}catch(e){}})();
+const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),removed:arcLd('removed',[]),
+  seen:{},ws:null,ready:false,hb:0,tries:0,blocked:false,refused:false,tab:arcRand(10),
   me:()=>({status:'arcade'}),   // the page replaces this: {status, game, gameName, join}
-  onChange:()=>{},onInvite:null,onSignal:null};
+  busy:()=>false,               // a game returns true while it is in an online game, so another tab can't take over
+  onChange:()=>{},onInvite:null,onSignal:null,onFriendAdded:null};
 arcSv('tag',arc.tag);
 const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
 function arcHandoff(){   // what to add to a link so the next page knows who you are
-  return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible}));}
+  return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible,r:arc.removed}));}
+let arcBC=null;try{arcBC=new BroadcastChannel('arcade-presence');}catch(e){}
+if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
+  if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
+    if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
+  else if(d.busyFor===arc.tab){arc.refused=true;arc.onChange();}};
 function arcStart(){
   if(arc.ws||!arc.visible)return;
+  if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
+  arc.blocked=false;
+  if(arcBC)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arc.onChange();}
+    if(m.src===ARC_LOBBY){arcFromDesk(m);return;}
+    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.refused=false;clearInterval(arc.hb);arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
-      if(++arc.tries<5)setTimeout(arcStart,2500);else{arc.blocked=true;arc.onChange();}}
+      if(!arc.refused&&++arc.tries<10)setTimeout(arcStart,1200);else{arc.blocked=true;arc.tries=0;arc.onChange();}}
     else if(m.type==='EXPIRE'){const c=arcCode(m.src);if(arc.seen[c])arc.seen[c].open=false;arc.onChange();if(arc.onSignal)arc.onSignal(m);}
     else if(!arcSignal(m)&&arc.onSignal)arc.onSignal(m);};
-  ws.onclose=()=>{arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible)setTimeout(arcStart,5000);};
+  ws.onclose=()=>{if(arc.ws===ws)arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible&&!arc.blocked)setTimeout(arcStart,3000);};
   ws.onerror=()=>{};
 }
-function arcStop(){if(arc.ws){arc.ws.onclose=null;try{arc.ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
-function arcSend(type,code,payload){if(arc.ws&&arc.ready)arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}
-function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,name:arc.name});
-  for(const c in arc.seen)if(Date.now()-arc.seen[c].t>20000)arc.seen[c].open=false;arc.onChange();}
-setInterval(()=>{if(arc.ready)arcPing();},8000);
+function arcStop(){arcDeskStop();arc.everyone={};const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
+function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}catch(e){}}
+function arcIsFriend(code){return arc.friends.some(f=>f.code===code);}
+function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,fr:1,name:arc.name});
+  for(const c in arc.seen)if(Date.now()-arc.seen[c].t>16000)arc.seen[c].open=false;arc.onChange();}
+setInterval(()=>{if(arc.ready){arcPing();arcHello();}if(Date.now()-arc.listAt>16000&&Object.keys(arc.everyone).length){arc.everyone={};arc.onChange();}},6000);
+/* Everyone online: one open page at a time is also the "lobby desk" (PeerJS id ARC_LOBBY). Every page says hello to
+   the desk every 6 seconds and gets back the list of everyone online. If there's no desk, the first page to notice becomes it. */
+const ARC_LOBBY='arcade-lobby-nm2';
+arc.everyone={};arc.desk=null;arc.listAt=0;
+function arcHello(){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type:'OFFER',dst:ARC_LOBBY,payload:Object.assign({lobby:'hi',name:arc.name},arc.me())}));}catch(e){}}
+function arcFromDesk(m){const p=m.payload||{};
+  if(m.type==='EXPIRE'){arcBeDesk();return;}
+  if(p.lobby==='list'&&Array.isArray(p.list)){const old=arc.everyone;arc.everyone={};arc.listAt=Date.now();
+    for(const e of p.list)if(e&&e.code&&e.code!==arc.tag)arc.everyone[e.code]=Object.assign({},e,{invited:old[e.code]&&old[e.code].invited});arc.onChange();}}
+function arcBeDesk(){if(arc.desk||!arc.visible||!arc.ready)return;
+  let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+ARC_LOBBY+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
+  const d={ws,who:{},hb:0};arc.desk=d;
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(m.type==='OPEN'){d.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);setTimeout(arcHello,300);}
+    else if(m.type==='ID-TAKEN')arcDeskStop();   // another page got there first
+    else if(m.type==='OFFER'&&m.payload&&m.payload.lobby==='hi'){const now=Date.now(),code=arcCode(m.src);if(!/^[A-Z0-9]{6}$/.test(code))return;
+      const fresh=!d.who[code];const e=Object.assign({},m.payload,{code,t:now});delete e.lobby;d.who[code]=e;
+      for(const c in d.who)if(now-d.who[c].t>15000)delete d.who[c];
+      const list=Object.values(d.who).map(x=>{const y=Object.assign({},x);delete y.t;return y;});
+      for(const c of fresh?Object.keys(d.who):[code])   // someone new: tell everyone straight away
+        try{ws.send(JSON.stringify({type:'ANSWER',dst:arcId(c),payload:{lobby:'list',list}}));}catch(err){}}};
+  ws.onclose=()=>{if(arc.desk===d)arcDeskStop();};ws.onerror=()=>{};}
+function arcDeskStop(){const d=arc.desk;if(!d)return;arc.desk=null;clearInterval(d.hb);d.ws.onclose=null;try{d.ws.close();}catch(e){}}
+function arcEveryoneList(){   // people online who aren't on your friends list yet
+  return Object.values(arc.everyone).filter(e=>!arcIsFriend(e.code)&&!arc.removed.includes(e.code)).map(e=>Object.assign({},e,{name:e.name||'PLAYER'}))
+    .sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||a.name.localeCompare(b.name));}
+function arcTakeOver(){if(arc.visible&&!arc.ws){arc.tries=0;arc.refused=false;arc.blocked=false;arcStart();}}   // use this tab
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)arcTakeOver();});
+window.addEventListener('focus',arcTakeOver);
+document.addEventListener('pointerdown',()=>{if(arc.blocked)arcTakeOver();},true);
+window.addEventListener('online',()=>{if(!arc.ws)arcStart();});
+window.addEventListener('storage',e=>{   // another tab changed the friend list or your name
+  if(e.key==='arcade.friends'){arc.friends=arcLd('friends',[]);arc.onChange();}
+  else if(e.key==='arcade.removed')arc.removed=arcLd('removed',[]);
+  else if(e.key==='arcade.name'){arc.name=arcLd('name','PLAYER');arc.onChange();}});
 function arcSignal(m){const p=m.payload||{},from=arcCode(m.src);
-  if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,name:arc.name},arc.me()));
-    if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,name:arc.name});return true;}
-  if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now()});
+  if((p.ping||p.pong)&&arc.removed.includes(from))return true;   // someone you removed
+  if((p.ping||p.pong)&&p.fr&&!arcIsFriend(from)){   // they added you: add them back
+    arc.friends.push({code:from,name:p.name||''});arcSv('friends',arc.friends);if(arc.onFriendAdded)arc.onFriendAdded(p.name||from,from);}
+  if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,fr:1,name:arc.name},arc.me()));
+    if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,fr:1,name:arc.name});return true;}
+  if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now(),invited:arc.seen[from]&&arc.seen[from].invited});
     const f=arc.friends.find(f=>f.code===from);if(f&&p.name&&f.name!==p.name){f.name=p.name;arcSv('friends',arc.friends);}
     arc.onChange();return true;}
-  if(p.invite){if(arc.onInvite)arc.onInvite(from,p);return true;}
+  if(p.invite){if(!arc.removed.includes(from)&&arc.onInvite)arc.onInvite(from,p);return true;}
   return false;}
 function arcAddFriend(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(code.length!==6)return 'Friend codes are 6 letters or numbers.';if(code===arc.tag)return "That's your own code.";
-  if(arc.friends.some(f=>f.code===code))return 'Already on your list.';
+  arc.removed=arc.removed.filter(c=>c!==code);arcSv('removed',arc.removed);
+  if(arcIsFriend(code))return 'Already on your list.';
   arc.friends.push({code,name:''});arcSv('friends',arc.friends);arcPing();return '';}
-function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];arcSv('friends',arc.friends);arc.onChange();}
-function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arc.onChange();}
-function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on)arcStart();else arcStop();arc.onChange();}
+function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];
+  if(!arc.removed.includes(code))arc.removed.push(code);arcSv('removed',arc.removed);arcSv('friends',arc.friends);arc.onChange();}
+function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arc.onChange();}
+function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on){arc.blocked=false;arcStart();}else arcStop();arc.onChange();}
+const ARC_ORDER={hosting:0,arcade:1,idle:1,solo:1,playing:2,full:2,offline:3};
 function arcFriendList(){return arc.friends.map(f=>{const s=arc.seen[f.code];return Object.assign({code:f.code,name:(s&&s.name)||f.name||f.code},
-  s&&s.open?s:{status:'offline'});});}
+  s&&s.open?s:{status:'offline'});}).sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||a.name.localeCompare(b.name));}
+function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what a friend is doing, the same everywhere
+  switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'Online in '+gn;case 'solo':return 'Playing '+gn+' alone';
+    case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';default:return 'Offline';}}
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
+function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
+  arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
+function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
+  const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
+  return /\/Arcade\.html$/i.test(here)?here:new URL('../Arcade.html',here).href;}
+function arcGoPlay(gameId,params){   // open any game (host, join, invite) through the Arcade page, which knows where each game lives
+  const q=new URLSearchParams(params||{});q.set('go',gameId);const b=ARC_QS.get('broker');if(b)q.set('broker',b);
+  arcStop();location.href=arcArcadeUrl()+'?'+q.toString()+arcHandoff();}
+/* ===== end of ARCADE PRESENCE v2 ===== */
 
 /* ---------- storage ---------- */
 function load(k,d){try{const v=localStorage.getItem('boom.'+k);return v===null?d:JSON.parse(v);}catch(e){return d;}}
@@ -1177,16 +1349,23 @@ function applySnap(s){
   if(state==='play'&&!paused&&musicOn)musicPlay(curWorld());else if(state!=='play'||paused)musicStop();
   frame++;
   if(was!==state&&state==='title'){curLv=null;guestLv=-1;}}
-/* ---------- online play: up to MAX_PLAYERS, over the Arcade's friend system ----------
-   Needs the Arcade presence block (arc, arcSend, arcFriendList...) pasted just above this one.
-   The host's browser runs the game; guests send key presses and draw the host's snapshots, over direct WebRTC.
-   Joining uses the host's friend code. When two different copies of the same game meet, the newer copy is
-   passed to the older one. Game provides: GAME_ID, GAME_NAME, GAME_BUILD (+1 every update), SELF_HTML, MAX_PLAYERS,
-   ACTIONS, input[], startGame(n), packSnap(), applySnap(s), gameStatus() -> 'idle'|'solo', onLobbyChange(),
-   onInvite(code,name), onUpdateReady(build). */
-const ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},
+/* ===== ARCADE ONLINE PLAY v2 — part 2 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
+   Paste unchanged into every online game, just below part 1; every copy must stay identical.
+   Up to MAX_PLAYERS over the Arcade's friend system. The host's browser runs the game; guests send key presses
+   and draw the host's snapshots. Joining uses the host's friend code.
+   Connecting: a direct WebRTC link first (STUN + TURN). If it hasn't opened after RELAY_AFTER ms, or it breaks,
+   the guest switches to the relay: the same messages go through the PeerJS service, so two friends who can see
+   each other online can always play. A hosted game keeps running while its tab is hidden.
+   When two different copies of the same game meet, the newer copy is passed to the older one.
+   The game provides: GAME_ID, GAME_NAME, GAME_BUILD (+1 every update), SELF_HTML, MAX_PLAYERS, ACTIONS, input[],
+   startGame(n), packSnap(), applySnap(s), gameStatus() -> 'idle'|'solo'|'playing', onLobbyChange(),
+   onInvite(code,name,payload), onUpdateReady(build). Its loop is split into advance(now) (stepping + sendSnap) and
+   tick(now){advance(now);draw();requestAnimationFrame(tick);}, followed by netKeepRunning(advance). See CLAUDE.md. */
+const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun2.l.google.com:19302']},
+  {urls:'stun:stun.cloudflare.com:3478'},
   {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
-const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false};
+const RELAY_AFTER=6000,RELAY_EVERY=3,JOIN_GIVEUP=25000,QUIET_DROP=9000;
+const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,fr:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false};
 const send=(type,code,payload)=>arcSend(type,code,Object.assign({game:GAME_ID},payload));
 function lobbyChanged(){if(typeof onLobbyChange==='function')onLobbyChange();}
 function say(m){net.msg=m;lobbyChanged();}
@@ -1194,25 +1373,53 @@ arc.me=()=>{if(net.role==='host'){const n=Object.values(net.guests).filter(g=>!g
     return {status:n>=MAX_PLAYERS||live?'full':'hosting',game:GAME_ID,gameName:GAME_NAME,join:arc.tag,v:GAME_BUILD};}
   if(net.role==='guest')return {status:'playing',game:GAME_ID,gameName:GAME_NAME,v:GAME_BUILD};
   return {status:gameStatus(),game:GAME_ID,gameName:GAME_NAME,v:GAME_BUILD};};
+arc.busy=()=>!!net.role;
 arc.onChange=lobbyChanged;
 arc.onInvite=(from,p)=>{if(typeof onInvite==='function')onInvite(from,p.name,p);};
 arc.onSignal=m=>{if(m.type==='EXPIRE'){if(net.role==='guest'&&arcCode(m.src)===net.host&&!(net.ch&&net.ch.readyState==='open')){
-    say('No game found for '+net.host+'. Check that your friend has the game open and is hosting.');leaveOnline();}return;}
+    say(net.host+" isn't online right now. Check that your friend has the game open.");leaveOnline();}return;}
   onSignal(m);};
-function invite(code){if(net.role!=='host')hostGame();arcInvite(code,GAME_ID,GAME_NAME,arc.tag);say('Invited. Waiting for them to accept…');}
-// --- WebRTC ---
-function newPC(code,onCand){const pc=new RTCPeerConnection(ICE);
+function invite(code){if(net.role!=='host')hostGame();arcInvite(code,GAME_ID,GAME_NAME,arc.tag);(arc.seen[code]||{}).invited=true;if(arc.everyone[code])arc.everyone[code].invited=true;
+  const f=arc.friends.find(f=>f.code===code)||arc.everyone[code];say('Invite sent to '+((f&&f.name)||code)+'. Waiting for them to join…');}
+// what clicking a friend's name does in this game: {label, go()} or null
+function friendAction(f){
+  if(f.status==='offline')return null;
+  if(f.status==='hosting'&&f.join&&!net.role)return f.game===GAME_ID?{label:'Join',go:()=>joinGame(f.join)}:{label:'Join in '+(f.gameName||'their game'),go:()=>arcGoPlay(f.game,{join:f.join})};
+  if(net.role==='guest'||f.status==='playing'||f.status==='full')return null;
+  return {label:f.invited?'Invite again':'Invite',go:()=>invite(f.code)};}
+// --- a link to one other player: a WebRTC data channel, or the relay, which looks the same to the code below ---
+function relayChannel(code,type){const ch={label:'relay',relay:true,readyState:'open',bufferedAmount:0,onopen:null,onclose:null,onmessage:null,
+    send(s){send(type,code,{rl:s});},
+    close(){if(ch.readyState==='closed')return;ch.readyState='closed';send(type,code,{rlBye:1});if(ch.onclose)ch.onclose();}};
+  return ch;}
+function newPC(code){const pc=new RTCPeerConnection(ICE);
   pc.onicecandidate=e=>{if(e.candidate)send('CANDIDATE',code,{candidate:e.candidate,type:'data',connectionId:'gc'});};
-  pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed')dropPeer(code,'The connection was lost.');};
+  pc.onconnectionstatechange=()=>{const s=pc.connectionState;
+    if(net.role==='guest'&&net.pc===pc&&(s==='failed'||s==='disconnected'))useRelay();   // the direct link broke: carry on through the relay
+    if(net.role==='host'&&s==='failed'){const g=net.guests[code];if(g&&g.pc===pc&&!(g.ch&&g.ch.relay))setTimeout(()=>{const h=net.guests[code];if(h&&h.pc===pc&&!(h.ch&&h.ch.relay))dropPeer(code,'The connection to '+h.name+' was lost.');},QUIET_DROP);}};
   return pc;}
+function freeSlot(){const used=Object.values(net.guests).filter(g=>!g.upd).map(g=>g.slot);let slot=1;while(used.includes(slot))slot++;return slot;}
 async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
   try{
-    if(p.refuse){say(p.refuse);leaveOnline();return;}
-    if(m.type==='OFFER'&&p.sdp){   // someone wants to join my game
-      if(p.game!==GAME_ID){send('ANSWER',from,{refuse:arc.name+' is playing a different game right now.'});return;}
-      if(net.role!=='host'){send('ANSWER',from,{refuse:arc.name+' is not hosting a game right now.'});return;}
-      if(!p.v){send('ANSWER',from,{refuse:'Your copy of the game is too old to update itself. Ask '+arc.name+' to send you theirs once.'});return;}
-      if(net.guests[from])return;
+    if(p.rl!=null||p.rlBye){   // relay traffic
+      const ch=net.role==='host'?(net.guests[from]&&net.guests[from].ch):net.role==='guest'&&from===net.host?net.ch:null;
+      if(!ch||!ch.relay||ch.readyState!=='open')return;
+      if(p.rlBye){ch.readyState='closed';if(ch.onclose)ch.onclose();}else if(ch.onmessage)ch.onmessage({data:p.rl});return;}
+    if(p.refuse){if(net.role==='guest'&&from===net.host){say(p.refuse);leaveOnline();}return;}
+    if(p.bye){if(net.role==='guest'&&from===net.host){say('The host closed the game.');leaveOnline(true);}
+      else if(net.role==='host'&&net.guests[from])dropPeer(from,net.guests[from].name+' left the game.');return;}
+    if(m.type==='OFFER'&&(p.sdp||p.relay)){   // someone wants to join my game
+      if(p.game!==GAME_ID){send('ANSWER',from,{refuse:arc.name+' is playing a different game right now. Click their name in the Arcade to join them there.'});return;}
+      if(net.role!=='host'){send('ANSWER',from,{refuse:arc.name+" isn't hosting right now. Ask them to invite you, or click their name to invite them."});return;}
+      if(!p.v){send('ANSWER',from,{refuse:'Your copy of the game is too old. Open the Arcade at '+ARC_HOME+' to get the newest one.'});return;}
+      if(p.relay){   // the direct link didn't work out: play through the relay instead
+        if(p.v!==GAME_BUILD){send('ANSWER',from,{refuse:'You and '+arc.name+' have different versions of '+GAME_NAME+'. Both of you open it from '+ARC_HOME+' to get the same one.'});return;}
+        let g=net.guests[from];if(g&&g.ch&&g.ch.readyState==='open'&&!g.ch.relay)return;
+        const slot=g&&!g.upd?g.slot:freeSlot();if(g){try{g.pc&&g.pc.close();}catch(e){}}
+        if(slot>=MAX_PLAYERS){delete net.guests[from];send('ANSWER',from,{refuse:arc.name+"'s game is full."});return;}
+        g={slot,name:p.name||from,cand:[],ch:null,pc:null};net.guests[from]=g;
+        const ch=relayChannel(from,'ANSWER');wireGuestChannel(from,ch);send('ANSWER',from,{relayOk:1,slot,v:GAME_BUILD});ch.onopen();lobbyChanged();return;}
+      if(net.guests[from]){const old=net.guests[from];if(old.ch&&old.ch.readyState==='open')return;try{old.pc&&old.pc.close();}catch(e){}delete net.guests[from];}   // they're trying again
       if(p.v!==GAME_BUILD){   // different copies: no game, just pass the newer one across
         const g={slot:-1,upd:true,peerBuild:p.v,name:p.name||from,cand:[],ch:null};net.guests[from]=g;g.pc=newPC(from);
         g.pc.ondatachannel=e=>{if(e.channel.label==='file')wireFile(e.channel,g.peerBuild,()=>dropPeer(from,''));};
@@ -1220,57 +1427,78 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
         send('ANSWER',from,{sdp:g.pc.localDescription,slot:-1,v:GAME_BUILD,type:'data',connectionId:'gc'});
         for(const c of g.cand.splice(0))await g.pc.addIceCandidate(c);
         say(g.name+(p.v<GAME_BUILD?' has an older copy (version '+p.v+'). Sending them yours…':' has a newer copy (version '+p.v+'). Receiving it…'));return;}
-      const used=Object.values(net.guests).filter(g=>!g.upd).map(g=>g.slot);let slot=1;while(used.includes(slot))slot++;
+      const slot=freeSlot();
       if(slot>=MAX_PLAYERS){send('ANSWER',from,{refuse:arc.name+"'s game is full."});return;}
       const g={slot,name:p.name||from,cand:[],ch:null};net.guests[from]=g;g.pc=newPC(from);
-      g.pc.ondatachannel=e=>{if(e.channel.label!=='file')wireGuestChannel(from,e.channel);};
+      g.pc.ondatachannel=e=>{if(e.channel.label!=='file'&&net.guests[from]===g)wireGuestChannel(from,e.channel);};
       await g.pc.setRemoteDescription(p.sdp);const ans=await g.pc.createAnswer();await g.pc.setLocalDescription(ans);
       send('ANSWER',from,{sdp:g.pc.localDescription,slot,v:GAME_BUILD,type:'data',connectionId:'gc'});
       for(const c of g.cand.splice(0))await g.pc.addIceCandidate(c);lobbyChanged();}
+    else if(m.type==='ANSWER'&&p.relayOk&&net.role==='guest'&&from===net.host){
+      if(net.ch&&net.ch.relay)return;net.slot=p.slot;net.peerBuild=p.v;const old=net.pc;net.pc=null;
+      wireHostLink(relayChannel(from,'OFFER'));try{old&&old.close();}catch(e){}net.ch.onopen();}
     else if(m.type==='ANSWER'&&p.sdp&&net.role==='guest'&&from===net.host&&net.pc){net.slot=p.slot;net.peerBuild=p.v;
       if(p.v!==GAME_BUILD)say(p.v<GAME_BUILD?'Your friend has an older copy (version '+p.v+'). Sending them yours…':'Your friend has a newer copy (version '+p.v+'). Receiving it…');
       await net.pc.setRemoteDescription(p.sdp);for(const c of net.cand.splice(0))await net.pc.addIceCandidate(c);}
     else if(m.type==='CANDIDATE'&&p.candidate){
       const pc=net.role==='host'?(net.guests[from]&&net.guests[from].pc):net.pc,q=net.role==='host'?(net.guests[from]&&net.guests[from].cand):net.cand;
-      if(!pc)return;if(pc.remoteDescription)await pc.addIceCandidate(p.candidate);else q.push(p.candidate);}
+      if(!pc||!q)return;if(pc.remoteDescription)await pc.addIceCandidate(p.candidate);else q.push(p.candidate);}
   }catch(err){console.warn('signal',err);}
 }
 // --- host ---
 function hostGame(){if(net.role)return;net.role='host';net.guests={};net.rc={};
-  say('You are hosting. Friends can join from their list, or with your friend code '+arc.tag+'.');arcPing();}
-function wireGuestChannel(code,ch){const g=net.guests[code];if(!g)return;g.ch=ch;
-  ch.onopen=()=>{g.last=Date.now();say(g.name+' joined as player '+(g.slot+1)+'.');lobbyChanged();};
-  ch.onclose=()=>dropPeer(code,g.name+' left the game.');
-  ch.onmessage=e=>{g.last=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k==='in')hostInput(g.slot,m,code);};}
+  say('You are hosting. Click a friend below to invite them, or give them your friend code '+arc.tag+'.');arcPing();}
+function wireGuestChannel(code,ch){const g=net.guests[code];if(!g)return;g.ch=ch;const mine=()=>net.guests[code]===g&&g.ch===ch;
+  ch.onopen=()=>{if(!mine())return;g.last=Date.now();say(g.name+' joined as player '+(g.slot+1)+'.');lobbyChanged();};
+  ch.onclose=()=>{if(mine())dropPeer(code,g.name+' left the game.');};
+  ch.onmessage=e=>{if(!mine())return;g.last=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k==='in')hostInput(g.slot,m,code);};}
 function lobbyPlayers(){   // host: who is in, by player number
   const out=[{slot:0,name:arc.name+' (you)'}];for(const c in net.guests){const g=net.guests[c];if(g.upd)continue;out.push({slot:g.slot,name:g.name,ready:!!(g.ch&&g.ch.readyState==='open')});}
   return out.sort((a,b)=>a.slot-b.slot);}
 function startOnlineGame(){const n=Math.max(...lobbyPlayers().map(p=>p.slot))+1;startGame(n);}
 function hostInput(slot,m,code){const i=input[slot];if(!i)return;const rc=net.rc[code]=net.rc[code]||{};
   for(const a of ACTIONS){i[a]=!!(m.g&&m.g[a]);const n=(m.c&&m.c[a])||0;if(n>(rc[a]||0)){rc[a]=n;i[a+'P']=true;}}}
-function sendSnap(){let s=null;
-  for(const c in net.guests){const ch=net.guests[c].ch;if(net.guests[c].upd||!ch||ch.readyState!=='open'||ch.bufferedAmount>65536)continue;
-    if(!s)s=JSON.stringify(Object.assign({k:'s',sq:++net.seq},packSnap()));ch.send(s);}}
+function sendSnap(){let s=null;net.fr++;
+  for(const c in net.guests){const g=net.guests[c],ch=g.ch;if(g.upd||!ch||ch.readyState!=='open'||ch.bufferedAmount>65536)continue;
+    if(ch.relay&&net.fr%RELAY_EVERY)continue;   // the relay gets every third picture
+    if(!s)s=JSON.stringify(Object.assign({k:'s',sq:++net.seq},packSnap()));try{ch.send(s);}catch(e){}}}
 function anyGuests(){return Object.values(net.guests).some(g=>!g.upd&&g.ch&&g.ch.readyState==='open');}
 // --- guest ---
-function joinGame(code){code=code.toUpperCase().replace(/[^A-Z0-9]/g,'');if(net.role||code.length!==6)return;
-  if(!arc.ready){say('Not connected to the online service yet. Try again in a moment.');return;}
-  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};say('Connecting to '+code+'…');
-  const pc=newPC(code);net.pc=pc;const ch=pc.createDataChannel('game',{ordered:false,maxRetransmits:0});net.ch=ch;
+function joinGame(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(net.role||code.length!==6)return;
+  if(code===arc.tag){say("That's your own friend code. Type your friend's code instead.");return;}
+  if(!arc.ready){say('Connecting to the online service… joining as soon as it is ready.');const t=setInterval(()=>{if(arc.ready){clearInterval(t);joinGame(code);}},300);setTimeout(()=>clearInterval(t),15000);return;}
+  if(!arcIsFriend(code))arcAddFriend(code);   // people you play with become friends, on both lists
+  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};const f=arc.friends.find(f=>f.code===code);say('Connecting to '+((f&&f.name)||code)+'…');
+  const pc=newPC(code);net.pc=pc;
+  wireHostLink(pc.createDataChannel('game',{ordered:false,maxRetransmits:0}));
   wireFile(pc.createDataChannel('file',{ordered:true}),null,()=>leaveOnline());
-  ch.onopen=()=>{net.lastHeard=Date.now();if(net.peerBuild!==GAME_BUILD){net.upd=true;return;}say('Connected! You are player '+(net.slot+1)+'.');lobbyChanged();};
-  ch.onclose=()=>{if(net.role==='guest'&&!net.upd){say('The host closed the game.');leaveOnline();}};
-  ch.onmessage=e=>{net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k==='s'&&m.sq>net.lastSeq){net.lastSeq=m.sq;net.snap=m;}};
-  (async()=>{const off=await pc.createOffer();await pc.setLocalDescription(off);
-    send('OFFER',code,{sdp:pc.localDescription,name:arc.name,v:GAME_BUILD,type:'data',connectionId:'gc',label:'game',serialization:'json',reliable:false});})();
-  setTimeout(()=>{if(net.role==='guest'&&net.host===code&&!(ch.readyState==='open')){say("Couldn't connect to "+code+'.');leaveOnline();}},20000);}
+  (async()=>{try{const off=await pc.createOffer();await pc.setLocalDescription(off);
+    send('OFFER',code,{sdp:pc.localDescription,name:arc.name,v:GAME_BUILD,type:'data',connectionId:'gc',label:'game',serialization:'json',reliable:false});}catch(e){useRelay();}})();
+  setTimeout(()=>{if(net.role==='guest'&&net.host===code&&!(net.ch&&net.ch.readyState==='open'))useRelay();},RELAY_AFTER);
+  setTimeout(()=>{if(net.role==='guest'&&net.host===code&&!(net.ch&&net.ch.readyState==='open')){say("Couldn't reach "+((f&&f.name)||code)+'. Check that they are hosting, then try again.');leaveOnline();}},JOIN_GIVEUP);}
+function useRelay(){if(net.role!=='guest'||net.upd||(net.ch&&net.ch.relay))return;
+  if(net.ch&&net.ch.readyState==='open'&&net.pc&&net.pc.connectionState==='connected')return;
+  net.relayAsk=(net.relayAsk||0)+1;if(net.relayAsk>3)return;
+  send('OFFER',net.host,{relay:1,name:arc.name,v:GAME_BUILD});}
+function wireHostLink(ch){net.ch=ch;const mine=()=>net.ch===ch;
+  ch.onopen=()=>{if(!mine())return;net.lastHeard=Date.now();if(net.peerBuild!==GAME_BUILD){net.upd=true;return;}say('Connected! You are player '+(net.slot+1)+'.');lobbyChanged();};
+  ch.onclose=()=>{if(!mine())return;if(net.role==='guest'&&!net.upd){if(!ch.relay&&net.pc){useRelay();return;}say('The host closed the game.');leaveOnline();}};
+  ch.onmessage=e=>{if(!mine())return;net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k==='s'&&m.sq>net.lastSeq){net.lastSeq=m.sq;net.snap=m;}};}
 function guestKey(a,down){const g=net.gIn;if(down&&!g[a])net.cnt[a]=(net.cnt[a]||0)+1;g[a]=down?1:0;sendInput();}
-function sendInput(){if(net.ch&&net.ch.readyState==='open')net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt}));}
+function sendInput(){if(net.ch&&net.ch.readyState==='open')try{net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt}));}catch(e){}}
 setInterval(()=>{if(net.role==='guest')sendInput();},100);
 setInterval(()=>{const now=Date.now();   // someone closed their game without saying goodbye
-  if(net.role==='host')for(const c in net.guests){const g=net.guests[c];if(!g.upd&&g.ch&&g.ch.readyState==='open'&&now-(g.last||now)>5000)dropPeer(c,g.name+' left the game.');}
-  if(net.role==='guest'&&!net.upd&&net.ch&&net.ch.readyState==='open'&&now-(net.lastHeard||now)>6000){say('Lost the connection to the host.');leaveOnline();}},1000);
+  if(net.role==='host')for(const c in net.guests){const g=net.guests[c];if(!g.upd&&g.ch&&g.ch.readyState==='open'&&now-(g.last||now)>QUIET_DROP)dropPeer(c,g.name+' left the game.');}
+  if(net.role==='guest'&&!net.upd&&net.ch&&net.ch.readyState==='open'){const q=now-(net.lastHeard||now);
+    if(q>2500&&!net.ch.relay)useRelay();if(q>QUIET_DROP){say('Lost the connection to the host.');leaveOnline();}}},1000);
 function guestFrame(){if(net.snap){applySnap(net.snap);net.snap=null;}}
+// keeps a hosted game running while its tab is hidden (browsers stop drawing hidden tabs, which would freeze every guest)
+function netKeepRunning(advance){let w=null;
+  const sync=()=>{const need=document.hidden&&net.role==='host';
+    if(need&&!w){try{w=new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),16)'],{type:'text/javascript'})));
+        w.onmessage=()=>{if(document.hidden&&net.role==='host')advance(performance.now());};}catch(e){w=null;}}
+    else if(!need&&w){w.terminate();w=null;}};
+  document.addEventListener('visibilitychange',sync);setInterval(sync,1000);}
 // --- passing a newer copy of the game to an older one ---
 const FILE_CHUNK=60000;let pendingUpdate=null;
 function wireFile(ch,peerBuild,done){let parts=[],want=0,build=0,sent=false;
@@ -1278,14 +1506,14 @@ function wireFile(ch,peerBuild,done){let parts=[],want=0,build=0,sent=false;
   const trySend=()=>{if(sent||ch.readyState!=='open'||!(theirs()>0&&GAME_BUILD>theirs()))return;sent=true;
     const n=Math.ceil(SELF_HTML.length/FILE_CHUNK);let i=0;ch.send(JSON.stringify({k:'file',b:GAME_BUILD,n}));ch.bufferedAmountLowThreshold=256*1024;
     const pump=()=>{while(i<n&&ch.bufferedAmount<1024*1024){ch.send(JSON.stringify({k:'part',i,d:SELF_HTML.slice(i*FILE_CHUNK,(i+1)*FILE_CHUNK)}));i++;}
-      if(i<n)ch.onbufferedamountlow=pump;else{ch.onbufferedamountlow=null;say('Your friend had an older copy (version '+theirs()+'). Yours (version '+GAME_BUILD+') has been sent. Once they save it and open the new copy, connect again to play.');}};
+      if(i<n)ch.onbufferedamountlow=pump;else{ch.onbufferedamountlow=null;say('Your friend had an older copy (version '+theirs()+'). Yours (version '+GAME_BUILD+') has been sent. Once they open the new copy, connect again to play. Playing from '+ARC_HOME+' avoids this.');}};
     pump();};
   ch.onopen=()=>{trySend();setTimeout(trySend,500);};
   ch.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(err){return;}
     if(m.k==='file'){parts=[];want=m.n;build=m.b;}
     else if(m.k==='part'){parts[m.i]=m.d;const got=parts.filter(v=>v!=null).length;say('Receiving version '+build+'… '+Math.round(got/want*100)+'%');
       if(got===want){pendingUpdate={html:parts.join(''),build};try{ch.close();}catch(err){}if(done)done();
-        say('Version '+build+' has arrived. Save it over your old copy of the game, then close this window and open the new copy.');
+        say('Version '+build+' has arrived. Save it over your old copy of the game, then open the new copy. (Or play from '+ARC_HOME+', which is always up to date.)');
         if(typeof onUpdateReady==='function')onUpdateReady(build);}}};
 }
 async function saveUpdate(){   // call from a button click: the browser only allows saving after a click
@@ -1297,21 +1525,23 @@ async function saveUpdate(){   // call from a button click: the browser only all
     say('Saved! Close this window and open the new copy (version '+pendingUpdate.build+'). If it went to your Downloads folder, move it into your game folder in place of the old one.');return true;
   }catch(err){if(err&&err.name!=='AbortError')say("Couldn't save it: "+err.message);return false;}}
 // --- leaving ---
-function dropPeer(code,msg){if(net.role==='host'){const g=net.guests[code];if(!g)return;try{g.ch&&g.ch.close();}catch(e){}try{g.pc.close();}catch(e){}
+function dropPeer(code,msg){if(net.role==='host'){const g=net.guests[code];if(!g)return;try{g.ch&&g.ch.close();}catch(e){}try{g.pc&&g.pc.close();}catch(e){}
     delete net.guests[code];const i=input[g.slot];if(i)for(const a of ACTIONS)i[a]=false;if(msg)say(msg);}
   else if(net.role==='guest'){say(msg);leaveOnline();}}
-function leaveOnline(){
-  if(net.role==='host')for(const c in net.guests){const g=net.guests[c];try{g.ch&&g.ch.close();}catch(e){}try{g.pc.close();}catch(e){}}
-  if(net.role==='guest'){try{net.ch&&net.ch.close();}catch(e){}try{net.pc&&net.pc.close();}catch(e){}}
-  Object.assign(net,{role:null,host:null,guests:{},pc:null,ch:null,cand:[],snap:null,upd:false,peerBuild:null});lobbyChanged();}
+function leaveOnline(quiet){
+  if(!quiet){if(net.role==='host')for(const c in net.guests)send('ANSWER',c,{bye:1});if(net.role==='guest'&&net.host)send('OFFER',net.host,{bye:1});}   // say goodbye
+  if(net.role==='host')for(const c in net.guests){const g=net.guests[c];delete net.guests[c];try{g.ch&&g.ch.close();}catch(e){}try{g.pc&&g.pc.close();}catch(e){}}
+  if(net.role==='guest'){const ch=net.ch,pc=net.pc;net.ch=null;net.pc=null;try{ch&&ch.close();}catch(e){}try{pc&&pc.close();}catch(e){}}
+  Object.assign(net,{role:null,host:null,guests:{},pc:null,ch:null,cand:[],snap:null,upd:false,peerBuild:null,relayAsk:0});lobbyChanged();}
 // --- the Arcade: start-up requests and the way back ---
-const ARCADE_URL=ARC_QS.get('arcade');
-function backToArcade(){if(!ARCADE_URL)return;leaveOnline();arcStop();const b=ARC_QS.get('broker');location.href=ARCADE_URL+(b?'?broker='+encodeURIComponent(b):'')+arcHandoff();}
-window.addEventListener('pagehide',arcStop);
+const ARCADE_URL=ARC_QS.get('arcade')||arcArcadeUrl();
+function backToArcade(){leaveOnline();arcStop();const b=ARC_QS.get('broker');location.href=ARCADE_URL+(b?'?broker='+encodeURIComponent(b):'')+arcHandoff();}
+window.addEventListener('pagehide',()=>{leaveOnline();arcStop();});
 arcStart();
 {const j=ARC_QS.get('join'),h=ARC_QS.get('host'),iv=ARC_QS.get('invite');
   const whenReady=f=>{const t=setInterval(()=>{if(arc.ready){clearInterval(t);f();}},200);};
   if(j)whenReady(()=>joinGame(j));else if(h)whenReady(()=>{hostGame();if(iv)invite(iv);});}
+/* ===== end of ARCADE ONLINE PLAY v2 ===== */
 
 // the online panel
 const netdlg=document.getElementById('netdlg'),netMsg=document.getElementById('net-msg');
@@ -1320,20 +1550,21 @@ function openOnline(auto){autoClose=!!auto;netdlg.hidden=false;renderNet();if(!a
 function closeNet(){netdlg.hidden=true;try{cv.focus({preventScroll:true});}catch(e){}}
 function renderNet(){
   if(netdlg.hidden)return;
-  netMsg.textContent=net.msg||(!arc.ready?(arc.visible?'Connecting to the online service…':'You are hidden. Turn on "Show me as online" in the Arcade to play online.'):
-    net.role?'':'Host a game, or join a friend who is hosting.');
+  netMsg.textContent=net.msg||(!arc.ready?(arcStatusLine()||'Connecting…'):
+    net.role?'':'Click a friend to invite them or join their game. Or host, and they can join you.');
   document.getElementById('net-mycode').textContent=arc.tag;
   const ul=document.getElementById('net-friends');ul.innerHTML='';
-  const fl=arcFriendList().filter(f=>f.status!=='offline');
-  if(!fl.length){const li=document.createElement('li');li.innerHTML='<span class="st">No friends online right now. Add friends by code on the Arcade dashboard.</span>';ul.appendChild(li);}
-  for(const f of fl){const li=document.createElement('li'),w=document.createElement('span');
-    const here=f.game===GAME_ID,txtS=f.status==='hosting'&&here?'Hosting BOOM':f.status==='arcade'?'In the Arcade':f.status==='full'?'In a full game':f.gameName?'In '+f.gameName:'Online';
-    w.innerHTML='<b></b><span class="st"></span>';w.querySelector('b').textContent=f.name;w.querySelector('.st').textContent=txtS;li.appendChild(w);
-    const b=document.createElement('button');b.className='nbtn';
-    if(f.status==='hosting'&&here&&!net.role){b.textContent='Join';b.onclick=()=>{autoClose=true;joinGame(f.join||f.code);};}
-    else if(net.role!=='guest'&&f.status!=='full'&&f.status!=='playing'){b.textContent=f.invited?'Invited':'Invite';b.disabled=!!f.invited;b.onclick=()=>{invite(f.code);(arc.seen[f.code]||{}).invited=true;renderNet();};}
-    else b.hidden=true;
-    li.appendChild(b);ul.appendChild(li);}
+  const fl=arcFriendList(),ev=arcEveryoneList();
+  const sub=t=>{const li=document.createElement('li');li.className='sub';li.textContent=t;ul.appendChild(li);};
+  const row=f=>{const act=friendAction(f),li=document.createElement('li'),b=document.createElement('button');b.className='nf';b.disabled=!act;
+    b.innerHTML='<i></i><span><b></b><span class="st"></span></span><em></em>';
+    b.querySelector('i').style.background=f.status==='offline'?'#5a6678':f.status==='hosting'?'#ff9a1f':f.status==='playing'||f.status==='full'?'#b37bff':'#2bffb0';
+    b.querySelector('b').textContent=f.name;b.querySelector('.st').textContent=arcDescribe(f);b.querySelector('em').textContent=act?act.label:'';
+    if(act)b.onclick=()=>{autoClose=act.label==='Join';act.go();renderNet();};
+    li.appendChild(b);ul.appendChild(li);};
+  if(!fl.length&&!ev.length){const li=document.createElement('li');li.innerHTML='<span class="st">Nobody else is online right now. Anyone who opens the Arcade or a game shows up here.</span>';ul.appendChild(li);}
+  if(fl.length){sub('Friends');fl.forEach(row);}
+  if(ev.length){sub('Everyone online');ev.forEach(row);}
   const host=net.role==='host',seats=document.getElementById('net-seats-wrap');seats.hidden=!host;
   if(host){const sl=document.getElementById('net-seats');sl.innerHTML='';const lp=lobbyPlayers();
     for(let k=0;k<MAX_PLAYERS;k++){const p=lp.find(q=>q.slot===k),li=document.createElement('li');li.innerHTML='<i></i><span></span>';li.querySelector('i').style.background=PCOL[k].a;
@@ -1351,9 +1582,10 @@ function onLobbyChange(){
 setInterval(()=>{if(autoClose&&connAt&&!netdlg.hidden&&Date.now()-connAt>1500&&net.role==='guest'){autoClose=false;closeNet();}},250);   // joined: get the panel out of the way
 function onInvite(code,name,p){if(net.role)return;
   netdlg.hidden=false;renderNet();
-  if(p.game===GAME_ID){netMsg.textContent=name+' invites you to play BOOM.';const w=document.getElementById('net-go-wrap'),b=document.getElementById('net-go');w.hidden=false;b.textContent='Join '+name;
+  if(p.game===GAME_ID){say(name+' invites you to play BOOM.');const w=document.getElementById('net-go-wrap'),b=document.getElementById('net-go');w.hidden=false;b.textContent='Join '+name;
     b.onclick=()=>{w.hidden=true;joinGame(p.join||code);};b.focus();}
-  else netMsg.textContent=name+' invites you to play '+(p.gameName||'another game')+'.'+(ARCADE_URL?' Go back to the Arcade to join them.':'');}
+  else{say(name+' invites you to play '+(p.gameName||'another game')+'.');const w=document.getElementById('net-go-wrap'),b=document.getElementById('net-go');w.hidden=false;
+    b.textContent='Join '+name+' in '+(p.gameName||'their game');b.onclick=()=>{w.hidden=true;arcGoPlay(p.game,{join:p.join||code});};b.focus();}}
 function onUpdateReady(){netdlg.hidden=false;renderNet();document.getElementById('net-upd').hidden=false;}
 document.getElementById('net-save').addEventListener('click',async e=>{e.stopPropagation();if(await saveUpdate())document.getElementById('net-upd').hidden=true;});
 document.getElementById('net-close').addEventListener('click',e=>{e.stopPropagation();closeNet();});
@@ -1367,11 +1599,12 @@ if(ARC_QS.get('host')||ARC_QS.get('join'))setTimeout(()=>openOnline(true),300); 
 
 /* ---------- loop ---------- */
 let acc=0,last=performance.now();
-function tick(now){acc+=Math.min(250,now-last);last=now;
+function advance(now){acc+=Math.min(250,now-last);last=now;
   if(net.role==='guest'&&net.ch&&net.ch.readyState==='open'){guestFrame();acc=0;}
   else{let stepped=false;while(acc>=1000/60){step();acc-=1000/60;stepped=true;}
-    if(stepped&&net.role==='host'&&anyGuests())sendSnap();}
-  draw();requestAnimationFrame(tick);}
+    if(stepped&&net.role==='host'&&anyGuests())sendSnap();}}
+function tick(now){advance(now);draw();requestAnimationFrame(tick);}
+netKeepRunning(advance);   // hosted games keep running while the tab is hidden
 requestAnimationFrame(tick);
 
 /* ---------- full screen ---------- */
@@ -1506,5 +1739,19 @@ tickClock();setInterval(tickClock,15000);
 
 })();
 </script>
+<script id="arcade-skin-js">
+(()=>{const bar=document.querySelector('.menubar'),rm=document.getElementById('readme');if(!bar)return;
+  const left=bar.querySelector('.mb-left'),home=document.createElement('button');home.className='a-btn home';home.textContent='Arcade';home.title='Back to the Arcade';
+  home.addEventListener('click',e=>{e.stopPropagation();const c=document.getElementById('cmd-arcade');if(c)c.click();});if(left)left.prepend(home);
+  const right=document.createElement('div');right.className='a-right';const how=document.createElement('button');how.className='a-btn';how.id='howto';how.textContent='How to play ▾';
+  how.setAttribute('aria-controls','readme');right.appendChild(how);bar.appendChild(right);
+  const sync=()=>{how.setAttribute('aria-expanded',rm&&!rm.hidden?'true':'false');how.textContent=rm&&!rm.hidden?'How to play ▴':'How to play ▾';};
+  how.addEventListener('click',e=>{e.stopPropagation();if(rm){rm.hidden=!rm.hidden;sync();if(!rm.hidden)rm.scrollTop=0;}});
+  if(rm){rm.hidden=true;new MutationObserver(sync).observe(rm,{attributes:true,attributeFilter:['hidden']});rm.addEventListener('click',e=>e.stopPropagation());
+    document.addEventListener('click',e=>{if(!rm.hidden&&!rm.contains(e.target)&&!how.contains(e.target))rm.hidden=true;});}
+  sync();})();
+</script>
+<!-- ===== end of ARCADE GAME SKIN ===== -->
+
 </body>
 </html>

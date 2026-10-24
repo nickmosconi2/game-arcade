@@ -1,3 +1,7 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bub &amp; Bob 2</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -213,6 +217,97 @@ kbd{
 .powers p{margin:2px 0 0;font-size:12px;line-height:1.45}
 </style>
 
+<!-- ===== ARCADE GAME SKIN v1 (from "Online Kit/arcade-game-skin.html"; keep every copy identical except --ar) =====
+     Gives a game page the Arcade's look: dark neon, a slim top bar with "Arcade" and "How to play", the game as big as the
+     window allows, and the Read Me as a drop-down. Paste just before <header class="menubar">, set --ar to the game's
+     width / height, and the script part at the very end of the page. -->
+<style id="arcade-skin">
+:root{--ar:1.25;
+  --a-bg:#04060d;--a-ink:#e6f6ff;--a-muted:#8aa2bd;--a-cy:#29e7ff;--a-or:#ff8a1f;--a-panel:rgba(8,16,30,.92);--a-edge:rgba(41,231,255,.38);
+  --a-glow:0 0 6px rgba(41,231,255,.75),0 0 22px rgba(41,231,255,.35);
+  --f-ui:"Lexend","Segoe UI",system-ui,-apple-system,sans-serif;--muted:var(--a-muted);color-scheme:dark}
+html,body{margin:0}
+body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transparent 60%),radial-gradient(60% 40% at 85% 0%,rgba(179,123,255,.12),transparent 70%),var(--a-bg) fixed;
+  color:var(--a-ink);font-family:var(--f-ui)}
+:focus-visible{outline:2px solid var(--a-cy);outline-offset:2px}
+/* top bar */
+.menubar{height:46px;background:rgba(4,8,16,.86);border-bottom:1px solid var(--a-edge);box-shadow:0 0 24px rgba(41,231,255,.12);font:600 14px var(--f-ui);color:var(--a-ink);backdrop-filter:blur(6px)}
+.menubar .logo{display:none}
+.mbtn{color:var(--a-ink);letter-spacing:.06em;text-transform:uppercase;font-size:12.5px;padding:0 12px;cursor:pointer;border-radius:0}
+.mbtn:hover,.mbtn[aria-expanded="true"]{background:rgba(41,231,255,.14);color:var(--a-cy)}
+.drop{background:#07101e;border:1px solid var(--a-cy);box-shadow:0 0 30px rgba(41,231,255,.25);color:var(--a-ink);padding:6px 0}
+.drop button{font:500 14px var(--f-ui);color:var(--a-ink);cursor:pointer}
+.drop button:hover,.drop button:focus-visible{background:rgba(41,231,255,.14);color:var(--a-cy)}
+.drop hr{border:0;border-top:1px solid rgba(41,231,255,.18)}
+.drop .k{color:var(--a-muted)}
+.optrow,.opthint,.modes{color:var(--a-ink)}.modes button{background:rgba(41,231,255,.06);border:1px solid var(--a-edge);color:var(--a-ink)}
+.modes button[aria-checked="true"]{background:var(--a-cy);color:#02121a}
+.clock{display:none}
+.a-right{display:flex;align-items:center;gap:8px}
+.a-btn{border:1px solid var(--a-edge);background:rgba(41,231,255,.08);color:var(--a-cy);padding:6px 14px;font:700 11.5px var(--f-ui);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+.a-btn:hover,.a-btn[aria-expanded="true"]{background:rgba(41,231,255,.2)}
+.a-btn.home{color:var(--a-ink);border-color:transparent;background:none;padding-left:4px}
+.a-btn.home::before{content:"‹ ";color:var(--a-cy)}
+#cmd-arcade,#hr-arcade{display:none!important}
+.menu:has(#mb-help){display:none}   /* "How to play" replaces the Help menu */
+@media (max-width:560px){.mbtn{padding:0 7px;font-size:11px;letter-spacing:.03em}.a-btn{padding:5px 9px;font-size:10.5px;letter-spacing:.08em}.menubar{padding-left:8px;padding-right:8px}}
+/* the game: as big as the window allows */
+.desk{display:block;padding:10px 16px 20px}
+.game-win,.desk:has(#readme[hidden]) .game-win,.desk:has(#readme:not([hidden])) .game-win{
+  width:min(calc(100vw - 32px),calc((100dvh - 100px)*var(--ar)));min-width:0;margin:0 auto;flex:none}
+.gamebar{display:none!important}
+@media (pointer:coarse){.game-win,.desk:has(#readme[hidden]) .game-win{width:min(calc(100vw - 20px),calc((100dvh - 210px)*var(--ar)))}.desk{padding:8px 10px 16px}}
+.win{background:transparent;border:0;box-shadow:none}
+.game-win .titlebar{height:30px;padding:0 2px}
+.game-win .stripes,.game-win .titlebar span.box{display:none}
+.game-win .ttl{font:800 13px var(--f-ui);letter-spacing:.22em;text-transform:uppercase;color:var(--a-cy);text-shadow:var(--a-glow);padding:0;flex:1}
+.game-win .box.zoom{width:auto;height:auto;border:0;background:none;box-shadow:none;color:var(--a-muted);font:600 12px var(--f-ui);letter-spacing:.1em;cursor:pointer}
+.game-win .box.zoom::after{content:"⛶  FULL SCREEN";position:static;border:0;width:auto;height:auto}
+.game-win .box.zoom:hover{color:var(--a-cy)}
+.win-body{padding:0}
+.screen-wrap{border:1px solid var(--a-edge);box-shadow:0 0 0 1px rgba(41,231,255,.15),0 0 40px rgba(41,231,255,.18);background:#000}
+.gamebar{padding-top:8px}.gamebar .hint{color:var(--a-muted);font-size:12.5px}
+.fsbtn{background:rgba(41,231,255,.08);border:1px solid var(--a-edge);color:var(--a-cy);border-radius:0;box-shadow:none;font:700 12px var(--f-ui);letter-spacing:.14em;text-transform:uppercase;padding:7px 14px}
+.fsbtn:hover{background:rgba(41,231,255,.2)}.fsbtn:active{transform:translateY(1px);box-shadow:none}
+.pbtn{background:rgba(41,231,255,.1);border:1px solid var(--a-edge);color:var(--a-ink);box-shadow:0 0 12px rgba(41,231,255,.15)}
+.pbtn.active{background:rgba(41,231,255,.3)}
+/* Read Me: a drop-down from "How to play" */
+.readme{position:fixed;z-index:40;top:52px;right:12px;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 66px);overflow:auto;min-width:0!important;
+  background:var(--a-panel)!important;border:1px solid var(--a-cy)!important;box-shadow:0 0 40px rgba(41,231,255,.25)!important;backdrop-filter:blur(8px)}
+.readme .titlebar{position:sticky;top:0;background:#07101e;height:38px;padding:0 10px 0 16px;border-bottom:1px solid rgba(41,231,255,.18);z-index:1}
+.readme .stripes{display:none}
+.readme .ttl{order:1;flex:1;font:800 12px var(--f-ui);letter-spacing:.24em;text-transform:uppercase;color:var(--a-cy);text-shadow:var(--a-glow);padding:0}
+.readme #readme-close{order:2;width:auto;height:auto;border:0;background:none;box-shadow:none;color:var(--a-muted);font:600 20px/1 var(--f-ui);cursor:pointer}
+.readme #readme-close::after{content:"×"}
+.readme #readme-close:hover{color:var(--a-ink)}
+.doc{background:transparent!important;color:var(--a-ink)!important;border:0!important;margin:0!important;columns:auto!important;font-family:var(--f-ui)!important}
+.doc h2{color:#fff}.doc h3{color:var(--a-cy);text-transform:uppercase;letter-spacing:.12em;font-size:12px!important}
+.doc .ver,.doc small{color:var(--a-muted)!important}
+.doc kbd{background:rgba(41,231,255,.1)!important;border:1px solid var(--a-edge)!important;color:var(--a-ink)!important;box-shadow:none!important;border-radius:3px}
+.doc table,.doc td,.doc th{border-color:rgba(41,231,255,.18)!important;color:var(--a-ink)}
+.doc a{color:var(--a-cy)}
+/* online panel */
+.netdlg{background:rgba(2,6,12,.6)}
+.netbox{background:#07101e!important;border:1px solid var(--a-cy)!important;box-shadow:0 0 40px rgba(41,231,255,.3)!important;color:var(--a-ink)}
+.netbox .titlebar{background:none;border-bottom:1px solid rgba(41,231,255,.18);height:36px}
+.netbox .stripes{display:none}
+.netbox .ttl{font:800 12px var(--f-ui);letter-spacing:.24em;text-transform:uppercase;color:var(--a-cy);text-shadow:var(--a-glow);margin:0 auto}
+.netbody{color:var(--a-ink);font-family:var(--f-ui);background:transparent!important;border:0!important;margin:0!important}
+.netbody .st,.netbody small{color:var(--a-muted)!important}
+.netbody h4{color:var(--a-cy);text-transform:uppercase;letter-spacing:.16em;font-size:11px!important}
+.nbtn,.netfriends .nf em{background:rgba(41,231,255,.1)!important;border:1px solid var(--a-edge)!important;color:var(--a-cy)!important;border-radius:0!important;box-shadow:none!important;
+  font:700 12px var(--f-ui)!important;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.nbtn:hover{background:rgba(41,231,255,.22)!important}
+#net-go,#net-start{background:var(--a-or)!important;border-color:var(--a-or)!important;color:#1a0a00!important;box-shadow:0 0 16px rgba(255,138,31,.5)!important}
+.netfriends li{border-color:rgba(41,231,255,.12)!important}
+.netfriends .nf:hover:not(:disabled),.netfriends .nf:focus-visible{background:rgba(41,231,255,.1)!important}
+.netfriends .nf i{border-color:transparent!important;box-shadow:0 0 8px currentColor}
+#net-input,.netbody input{background:rgba(2,8,16,.8)!important;border:1px solid var(--a-edge)!important;color:var(--a-cy)!important;border-radius:0!important;letter-spacing:.16em}
+.mycode{color:var(--a-cy)}
+.codeline{font-size:11.5px!important;color:var(--a-muted)}.codeline .mycode{font-size:12px!important;letter-spacing:.12em}
+.seats li{color:var(--a-ink)}
+</style>
+<!-- ===== end of ARCADE GAME SKIN (style part) ===== -->
 <header class="menubar">
   <nav class="mb-left" aria-label="Menu bar">
     <span class="logo" aria-hidden="true"></span>
@@ -254,7 +349,7 @@ kbd{
     <div class="menu">
       <button class="mbtn" id="mb-help" aria-haspopup="true" aria-expanded="false">Help</button>
       <div class="drop" hidden>
-        <button data-cmd="readme">Show Read Me</button>
+        <button data-cmd="readme">How to Play</button>
       </div>
     </div>
   </nav>
@@ -313,7 +408,7 @@ kbd{
     </div>
   </section>
 
-  <section class="win readme" id="readme" aria-label="Read Me">
+  <section class="win readme" id="readme" aria-label="Read Me" hidden>
     <div class="titlebar">
       <button class="box" id="readme-close" aria-label="Close Read Me"></button>
       <span class="stripes" aria-hidden="true"></span>
@@ -485,62 +580,132 @@ kbd{
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
 const GAME_BUILD=41;   // goes up by one with every update
 const GAME_ID='bubnbob2',GAME_NAME='Bub & Bob 2';
-/* ---------- Arcade presence: one friend code across the Arcade page and every game ----------
-   While a page is open it registers with the free PeerJS service as arcade-<friend code>, answers
-   "are you there?" from friends with what it's doing, asks its own friends the same every 8 seconds,
-   and passes on invites. Moving from the Arcade into a game (and back) hands the registration over. */
+/* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
+   Paste unchanged into the Arcade page and every game; every copy must stay identical.
+   One friend code across the Arcade page and every game. While a page is open it registers with the free
+   PeerJS service as arcade-<friend code>, tells friends what it's doing every 6 seconds, and passes on invites.
+   - Friends are mutual: when you add someone's code, you appear on their list too (unless they removed you).
+   - Only one tab per player can be online. The tab you're looking at takes over, unless the other tab is
+     in an online game right now.
+   - Moving from the Arcade into a game (and back) hands who you are over in the link (#arc=...). */
+const ARC_HOME='https://nickmosconi2.github.io/game-arcade/';   // the published Arcade: always the newest version
 const ARC_QS=new URLSearchParams(location.search);
-const ARC_BROKER=ARC_QS.get('broker')||'wss://0.peerjs.com:443/peerjs';
+const ARC_BROKER=ARC_QS.get('broker')||'wss://0.peerjs.com:443/peerjs';   // ?broker=ws://localhost:9000/peerjs for testing
 const ARC_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const arcRand=n=>{let s='';for(let i=0;i<n;i++)s+=ARC_CHARS[Math.floor(Math.random()*ARC_CHARS.length)];return s;};
 const arcLd=(k,d)=>{try{const v=localStorage.getItem('arcade.'+k);return v===null?d:JSON.parse(v);}catch(e){return d;}};
 const arcSv=(k,v)=>{try{localStorage.setItem('arcade.'+k,JSON.stringify(v));}catch(e){}};
-(()=>{const m=location.hash.match(/arc=([^&]+)/);if(!m)return;   // identity handed over by the Arcade page
-  try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);}catch(e){}})();
-const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),
-  seen:{},ws:null,ready:false,hb:0,tries:0,
+(()=>{const m=location.hash.match(/arc=([^&]+)/);if(!m)return;   // identity handed over by the previous page
+  try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);if(o.r)arcSv('removed',o.r);}catch(e){}
+  try{history.replaceState(null,'',location.href.split('#')[0]);}catch(e){}})();
+const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),removed:arcLd('removed',[]),
+  seen:{},ws:null,ready:false,hb:0,tries:0,blocked:false,refused:false,tab:arcRand(10),
   me:()=>({status:'arcade'}),   // the page replaces this: {status, game, gameName, join}
-  onChange:()=>{},onInvite:null,onSignal:null};
+  busy:()=>false,               // a game returns true while it is in an online game, so another tab can't take over
+  onChange:()=>{},onInvite:null,onSignal:null,onFriendAdded:null};
 arcSv('tag',arc.tag);
 const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
 function arcHandoff(){   // what to add to a link so the next page knows who you are
-  return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible}));}
+  return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible,r:arc.removed}));}
+let arcBC=null;try{arcBC=new BroadcastChannel('arcade-presence');}catch(e){}
+if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
+  if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
+    if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
+  else if(d.busyFor===arc.tab){arc.refused=true;arc.onChange();}};
 function arcStart(){
   if(arc.ws||!arc.visible)return;
+  if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
+  arc.blocked=false;
+  if(arcBC)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arc.onChange();}
+    if(m.src===ARC_LOBBY){arcFromDesk(m);return;}
+    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.refused=false;clearInterval(arc.hb);arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
-      if(++arc.tries<5)setTimeout(arcStart,2500);else{arc.blocked=true;arc.onChange();}}
+      if(!arc.refused&&++arc.tries<10)setTimeout(arcStart,1200);else{arc.blocked=true;arc.tries=0;arc.onChange();}}
     else if(m.type==='EXPIRE'){const c=arcCode(m.src);if(arc.seen[c])arc.seen[c].open=false;arc.onChange();if(arc.onSignal)arc.onSignal(m);}
     else if(!arcSignal(m)&&arc.onSignal)arc.onSignal(m);};
-  ws.onclose=()=>{arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible)setTimeout(arcStart,5000);};
+  ws.onclose=()=>{if(arc.ws===ws)arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible&&!arc.blocked)setTimeout(arcStart,3000);};
   ws.onerror=()=>{};
 }
-function arcStop(){if(arc.ws){arc.ws.onclose=null;try{arc.ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
-function arcSend(type,code,payload){if(arc.ws&&arc.ready)arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}
-function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,name:arc.name});
-  for(const c in arc.seen)if(Date.now()-arc.seen[c].t>20000)arc.seen[c].open=false;arc.onChange();}
-setInterval(()=>{if(arc.ready)arcPing();},8000);
+function arcStop(){arcDeskStop();arc.everyone={};const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
+function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}catch(e){}}
+function arcIsFriend(code){return arc.friends.some(f=>f.code===code);}
+function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,fr:1,name:arc.name});
+  for(const c in arc.seen)if(Date.now()-arc.seen[c].t>16000)arc.seen[c].open=false;arc.onChange();}
+setInterval(()=>{if(arc.ready){arcPing();arcHello();}if(Date.now()-arc.listAt>16000&&Object.keys(arc.everyone).length){arc.everyone={};arc.onChange();}},6000);
+/* Everyone online: one open page at a time is also the "lobby desk" (PeerJS id ARC_LOBBY). Every page says hello to
+   the desk every 6 seconds and gets back the list of everyone online. If there's no desk, the first page to notice becomes it. */
+const ARC_LOBBY='arcade-lobby-nm2';
+arc.everyone={};arc.desk=null;arc.listAt=0;
+function arcHello(){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type:'OFFER',dst:ARC_LOBBY,payload:Object.assign({lobby:'hi',name:arc.name},arc.me())}));}catch(e){}}
+function arcFromDesk(m){const p=m.payload||{};
+  if(m.type==='EXPIRE'){arcBeDesk();return;}
+  if(p.lobby==='list'&&Array.isArray(p.list)){const old=arc.everyone;arc.everyone={};arc.listAt=Date.now();
+    for(const e of p.list)if(e&&e.code&&e.code!==arc.tag)arc.everyone[e.code]=Object.assign({},e,{invited:old[e.code]&&old[e.code].invited});arc.onChange();}}
+function arcBeDesk(){if(arc.desk||!arc.visible||!arc.ready)return;
+  let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+ARC_LOBBY+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
+  const d={ws,who:{},hb:0};arc.desk=d;
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(m.type==='OPEN'){d.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);setTimeout(arcHello,300);}
+    else if(m.type==='ID-TAKEN')arcDeskStop();   // another page got there first
+    else if(m.type==='OFFER'&&m.payload&&m.payload.lobby==='hi'){const now=Date.now(),code=arcCode(m.src);if(!/^[A-Z0-9]{6}$/.test(code))return;
+      const fresh=!d.who[code];const e=Object.assign({},m.payload,{code,t:now});delete e.lobby;d.who[code]=e;
+      for(const c in d.who)if(now-d.who[c].t>15000)delete d.who[c];
+      const list=Object.values(d.who).map(x=>{const y=Object.assign({},x);delete y.t;return y;});
+      for(const c of fresh?Object.keys(d.who):[code])   // someone new: tell everyone straight away
+        try{ws.send(JSON.stringify({type:'ANSWER',dst:arcId(c),payload:{lobby:'list',list}}));}catch(err){}}};
+  ws.onclose=()=>{if(arc.desk===d)arcDeskStop();};ws.onerror=()=>{};}
+function arcDeskStop(){const d=arc.desk;if(!d)return;arc.desk=null;clearInterval(d.hb);d.ws.onclose=null;try{d.ws.close();}catch(e){}}
+function arcEveryoneList(){   // people online who aren't on your friends list yet
+  return Object.values(arc.everyone).filter(e=>!arcIsFriend(e.code)&&!arc.removed.includes(e.code)).map(e=>Object.assign({},e,{name:e.name||'PLAYER'}))
+    .sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||a.name.localeCompare(b.name));}
+function arcTakeOver(){if(arc.visible&&!arc.ws){arc.tries=0;arc.refused=false;arc.blocked=false;arcStart();}}   // use this tab
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)arcTakeOver();});
+window.addEventListener('focus',arcTakeOver);
+document.addEventListener('pointerdown',()=>{if(arc.blocked)arcTakeOver();},true);
+window.addEventListener('online',()=>{if(!arc.ws)arcStart();});
+window.addEventListener('storage',e=>{   // another tab changed the friend list or your name
+  if(e.key==='arcade.friends'){arc.friends=arcLd('friends',[]);arc.onChange();}
+  else if(e.key==='arcade.removed')arc.removed=arcLd('removed',[]);
+  else if(e.key==='arcade.name'){arc.name=arcLd('name','PLAYER');arc.onChange();}});
 function arcSignal(m){const p=m.payload||{},from=arcCode(m.src);
-  if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,name:arc.name},arc.me()));
-    if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,name:arc.name});return true;}
-  if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now()});
+  if((p.ping||p.pong)&&arc.removed.includes(from))return true;   // someone you removed
+  if((p.ping||p.pong)&&p.fr&&!arcIsFriend(from)){   // they added you: add them back
+    arc.friends.push({code:from,name:p.name||''});arcSv('friends',arc.friends);if(arc.onFriendAdded)arc.onFriendAdded(p.name||from,from);}
+  if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,fr:1,name:arc.name},arc.me()));
+    if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,fr:1,name:arc.name});return true;}
+  if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now(),invited:arc.seen[from]&&arc.seen[from].invited});
     const f=arc.friends.find(f=>f.code===from);if(f&&p.name&&f.name!==p.name){f.name=p.name;arcSv('friends',arc.friends);}
     arc.onChange();return true;}
-  if(p.invite){if(arc.onInvite)arc.onInvite(from,p);return true;}
+  if(p.invite){if(!arc.removed.includes(from)&&arc.onInvite)arc.onInvite(from,p);return true;}
   return false;}
 function arcAddFriend(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(code.length!==6)return 'Friend codes are 6 letters or numbers.';if(code===arc.tag)return "That's your own code.";
-  if(arc.friends.some(f=>f.code===code))return 'Already on your list.';
+  arc.removed=arc.removed.filter(c=>c!==code);arcSv('removed',arc.removed);
+  if(arcIsFriend(code))return 'Already on your list.';
   arc.friends.push({code,name:''});arcSv('friends',arc.friends);arcPing();return '';}
-function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];arcSv('friends',arc.friends);arc.onChange();}
-function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arc.onChange();}
-function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on)arcStart();else arcStop();arc.onChange();}
+function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];
+  if(!arc.removed.includes(code))arc.removed.push(code);arcSv('removed',arc.removed);arcSv('friends',arc.friends);arc.onChange();}
+function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arc.onChange();}
+function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on){arc.blocked=false;arcStart();}else arcStop();arc.onChange();}
+const ARC_ORDER={hosting:0,arcade:1,idle:1,solo:1,playing:2,full:2,offline:3};
 function arcFriendList(){return arc.friends.map(f=>{const s=arc.seen[f.code];return Object.assign({code:f.code,name:(s&&s.name)||f.name||f.code},
-  s&&s.open?s:{status:'offline'});});}
+  s&&s.open?s:{status:'offline'});}).sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||a.name.localeCompare(b.name));}
+function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what a friend is doing, the same everywhere
+  switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'Online in '+gn;case 'solo':return 'Playing '+gn+' alone';
+    case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';default:return 'Offline';}}
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
+function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
+  arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
+function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
+  const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
+  return /\/Arcade\.html$/i.test(here)?here:new URL('../Arcade.html',here).href;}
+function arcGoPlay(gameId,params){   // open any game (host, join, invite) through the Arcade page, which knows where each game lives
+  const q=new URLSearchParams(params||{});q.set('go',gameId);const b=ARC_QS.get('broker');if(b)q.set('broker',b);
+  arcStop();location.href=arcArcadeUrl()+'?'+q.toString()+arcHandoff();}
+/* ===== end of ARCADE PRESENCE v2 ===== */
 
 const LW=320, LH=256, PFY=16, ROWS=15;
 const cv=document.getElementById('screen'), ctx=cv.getContext('2d');
@@ -2459,7 +2624,8 @@ function draw(){
    the free PeerJS service (0.peerjs.com) is only used for a moment to introduce them using the room code. */
 const QS=new URLSearchParams(location.search);
 const BROKER=QS.get('broker')||'wss://0.peerjs.com:443/peerjs';   // ?broker=ws://localhost:9000/peerjs for testing
-const ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},
+const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun2.l.google.com:19302']},
+  {urls:'stun:stun.cloudflare.com:3478'},
   {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
 const CODE_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',ID_PREFIX='bubnbob-';
 const net={me:null,off:{x:0,y:0},hist:[],q:0,ackQ:0,lastJc:0,role:null,ws:null,pc:null,ch:null,code:'',peerId:'',remoteId:'',hb:0,inT:0,snap:null,seq:0,lastSeq:0,ev:[],evId:0,lastEv:-1,gIn:{left:0,right:0,jump:0,fire:0,jc:0,fc:0,pc:0},rc:{jc:0,fc:0,pc:0},cand:[]};
@@ -2593,7 +2759,7 @@ function hostGame(retry){
 let inviteAfterHost=null;
 function hostFriends(){   // while waiting, invite any friend who is online
   const ul=document.getElementById('net-friends');if(net.role!=='host'||(net.ch&&net.ch.readyState==='open')||netdlg.hidden){ul.hidden=true;return;}
-  const on=arcFriendList().filter(f=>f.status!=='offline');ul.innerHTML='';ul.hidden=!on.length;
+  const on=arcFriendList().filter(f=>f.status!=='offline').concat(arcEveryoneList().filter(f=>f.status!=='playing'&&f.status!=='full'));ul.innerHTML='';ul.hidden=!on.length;
   for(const f of on){const li=document.createElement('li');const sp=document.createElement('span');sp.textContent=f.name;li.appendChild(sp);
     const b=document.createElement('button');b.className='nbtn';b.textContent=f.invited?'Invited':'Invite';b.disabled=!!f.invited;
     b.onclick=()=>{arcInvite(f.code,GAME_ID,GAME_NAME,net.code);(arc.seen[f.code]||{}).invited=true;b.textContent='Invited';b.disabled=true;};li.appendChild(b);ul.appendChild(li);}}
@@ -2608,8 +2774,10 @@ arc.onInvite=(from,p)=>{
   if(p.game===GAME_ID&&p.join){showNet(p.name+' invites you to play '+GAME_NAME+' with them.');
     const w=document.getElementById('net-go-wrap'),b=document.getElementById('net-go');w.hidden=false;b.textContent='Join '+p.name;
     b.onclick=()=>{w.hidden=true;joinGame(p.join);};b.focus();}
-  else showNet(p.name+' invites you to play '+(p.gameName||'another game')+'.'+(ARCADE_URL?' Go back to the Arcade to join them.':''));};
-const ARCADE_URL=ARC_QS.get('arcade');
+  else{showNet(p.name+' invites you to play '+(p.gameName||'another game')+'.');const w=document.getElementById('net-go-wrap'),b=document.getElementById('net-go');w.hidden=false;
+    b.textContent='Join '+p.name+' in '+(p.gameName||'their game');b.onclick=()=>{w.hidden=true;arcGoPlay(p.game,{join:p.join||from});};b.focus();}};
+arc.busy=()=>!!net.role;
+const ARCADE_URL=ARC_QS.get('arcade')||arcArcadeUrl();
 function backToArcade(){if(!ARCADE_URL)return;if(net.role)leaveOnline(null);arcStop();
   const b=ARC_QS.get('broker');location.href=ARCADE_URL+(b?'?broker='+encodeURIComponent(b):'')+arcHandoff();}
 function hostInput(m){
@@ -2942,3 +3110,16 @@ function tickClock(){clock.textContent=new Date().toLocaleTimeString([],{hour:'n
 tickClock();setInterval(tickClock,15000);
 })();
 </script>
+<script id="arcade-skin-js">
+(()=>{const bar=document.querySelector('.menubar'),rm=document.getElementById('readme');if(!bar)return;
+  const left=bar.querySelector('.mb-left'),home=document.createElement('button');home.className='a-btn home';home.textContent='Arcade';home.title='Back to the Arcade';
+  home.addEventListener('click',e=>{e.stopPropagation();const c=document.getElementById('cmd-arcade');if(c)c.click();});if(left)left.prepend(home);
+  const right=document.createElement('div');right.className='a-right';const how=document.createElement('button');how.className='a-btn';how.id='howto';how.textContent='How to play ▾';
+  how.setAttribute('aria-controls','readme');right.appendChild(how);bar.appendChild(right);
+  const sync=()=>{how.setAttribute('aria-expanded',rm&&!rm.hidden?'true':'false');how.textContent=rm&&!rm.hidden?'How to play ▴':'How to play ▾';};
+  how.addEventListener('click',e=>{e.stopPropagation();if(rm){rm.hidden=!rm.hidden;sync();if(!rm.hidden)rm.scrollTop=0;}});
+  if(rm){rm.hidden=true;new MutationObserver(sync).observe(rm,{attributes:true,attributeFilter:['hidden']});rm.addEventListener('click',e=>e.stopPropagation());
+    document.addEventListener('click',e=>{if(!rm.hidden&&!rm.contains(e.target)&&!how.contains(e.target))rm.hidden=true;});}
+  sync();})();
+</script>
+<!-- ===== end of ARCADE GAME SKIN ===== -->
