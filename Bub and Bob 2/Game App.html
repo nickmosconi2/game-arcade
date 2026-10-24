@@ -465,7 +465,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <h3>Critters</h3>
       <p>Critters keep working their way down to the bottom of the stage, then drop through the hole in the floor and fall back in from the top. They only climb up when a dino is close by and above them.</p>
       <ul class="sprites">
-        <li><img data-sprite="enemy-u" alt=""><div><b>Prickle</b><span>Walks and hops. The only critter in rounds 1-4</span></div></li>
+        <li><img data-sprite="enemy-u" alt=""><div><b>Prickle</b><span>A wind-up that walks and hops, and only turns round when it bumps into a wall. The only critter in rounds 1-4</span></div></li>
         <li><img data-sprite="enemy-d" alt=""><div><b>Ghost</b><span>From round 5. White ghost. Walks the platforms; if it spots you on its level it stops, flashes !, then shoots fire</span></div></li>
         <li><img data-sprite="enemy-j" alt=""><div><b>Wobbler</b><span>From round 11. Purple floater. Drifts around, doesn't shoot</span></div></li>
         <li><img data-sprite="enemy-c" alt=""><div><b>Clank</b><span>From round 21. Wind-up spring, jumps a lot</span></div></li>
@@ -508,8 +508,8 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <h3>Special-power items</h3>
       <p>A magic cane turns up on 1 board in 5 and a treasure box on about 1 in 7, but never both on the same board. Separately, about 1 board in 7 gets a potion, umbrella or bubble gum, with or without a cane or box. When a board has one, it appears on a ledge once, 5 to 17 seconds into the round, for 10 seconds. Fruit and the other basic items can show up on any board.</p>
       <ul class="powers">
-        <li><img data-sprite="treat-8" alt=""><div><b>Magic Cane</b><p>When the round ends, every bubble still floating turns into a surprise prize, and a giant one a third of the screen wide drops to the bottom. The prize is usually a food (strawberry, peach, banana, pepper, cake, shaved ice or grapes), sometimes a diamond. Small ones are 1,000 pts each, the giant one 10,000. Leave plenty of bubbles floating!</p></div></li>
-        <li><img data-sprite="treat-7" alt=""><div><b>Treasure Box</b><p>Comes in five colors. When the round ends, every bubble still floating turns into a diamond in the box's color, and a giant diamond in the same color drops to the bottom. Small ones are 1,000 pts each, the giant one 10,000.</p></div></li>
+        <li><img data-sprite="treat-8" alt=""><div><b>Magic Cane</b><p>When the round ends, every bubble still floating turns into a surprise prize, and a giant one a third of the screen wide drops to the bottom. The prize is usually a food (strawberry, peach, banana, pepper, cake, shaved ice or grapes), sometimes a diamond. The giant food is worth 10,000 (strawberry) up to 30,000 (grapes): strawberry 10,000, peach 12,000, banana 15,000, pepper 18,000, cake 22,000, shaved ice 26,000, grapes 30,000. Each small one is worth a tenth of its giant. Leave plenty of bubbles floating!</p></div></li>
+        <li><img data-sprite="treat-7" alt=""><div><b>Treasure Box</b><p>Comes in five colors. When the round ends, every bubble still floating turns into a diamond in the box's color, and a giant diamond in the same color drops to the bottom. A giant gold diamond is worth 70,000, red 60,000, magenta 50,000, blue 40,000 and green 30,000. Each small one is worth a tenth of its giant (gold 7,000 down to green 3,000).</p></div></li>
         <li><img data-sprite="treat-5" alt=""><div><b>Potion</b><p>Every critter vanishes and clovers fill the top half of the screen. Grab as many as you can in 15 seconds. Getting them all adds up to 40,000 pts, enough for two extra dinos.</p></div></li>
         <li><img data-sprite="power-12" alt=""><div><b>Umbrella</b><p>Every critter vanishes and you warp ahead, skipping the next 3 rounds (round 5 takes you to round 9).</p></div></li>
         <li><img data-sprite="power-13" alt=""><div><b>Bubble Gum</b><p>Comes in pink, blue or yellow wrappers, and every color gives the power. Your bubbles shoot faster and farther, you can blow more than twice as fast, and up to 15 can be on screen at once. A gum icon on your side wall shows it's on. It lasts through later rounds until you lose a life. In 2 player, only the dino who grabbed it gets the power.</p></div></li>
@@ -578,7 +578,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=42;   // goes up by one with every update
+const GAME_BUILD=43;   // goes up by one with every update
 const GAME_ID='bubnbob2',GAME_NAME='Bub & Bob 2';
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
@@ -852,6 +852,10 @@ const BIG_NAMES=['STRAWBERRY','PEACH','BANANA','PEPPER','CAKE','SHAVED ICE','GRA
 const SHOWER_FOOD=14;   // treat type for the cane's food shower
 const BIG_DIAMOND_SRC=cutWH('bonus',288,344,32,32);
 const BIG_GEMS=GEM_PAL.map(pal=>recolorGem(BIG_DIAMOND_SRC,pal));
+// what the big end-of-round prizes are worth; each small copy in the shower is worth a tenth
+const GEM_BIG_PTS=[50000,70000,60000,40000,30000];   // magenta, yellow (gold), red, blue, green diamonds
+const FOOD_BIG_PTS=[10000,12000,15000,18000,22000,26000,30000];   // strawberry, peach, banana, pepper, cake, shaved ice, grapes
+const bigPts=g=>g.bk==='g'?GEM_BIG_PTS[g.bi]||30000:FOOD_BIG_PTS[g.bi]||10000;
 const BIG_PTS=10000,BIGW=Math.round(LW/3),BIGX=Math.round((LW-BIGW)/2),BIG_FLOOR=224-BIGW;
 
 // every food item on the bonus sheet, grouped by points; a popped critter drops a random food from its group
@@ -1633,6 +1637,9 @@ function loadLevel(){
   enemies=P.enemies.map(([k,x,y,a])=>makeEnemy(k,x,y,a));
   if(FX.shield)for(const e of enemies)if(Math.random()<0.45)e.shield=true;   // takes two bubbles
   initSpecial(P);
+  for(const en of enemies)if(P.spawns.some(sp=>sp&&Math.abs(en.x-sp.x)<32)){   // a critter lined up with a dino's start spot would drop on them: move it aside
+    const free=(x,y)=>{const r=Math.floor((y+8)/16);return x>=16&&x<=288&&P.spawns.every(sp=>!sp||Math.abs(x-sp.x)>=48)&&[x+2,x+13].every(px=>{const c=Math.floor(px/16);return !grid[r]||grid[r][c]!=='='&&grid[r][c]!=='#';});};
+    let done=false;for(const dy of [0,-16,16,-32,32,-48,48]){for(const d of [48,-48,64,-64,80,-80,96,-96,128,-128,160,-160,192,-192])if(free(en.x+d,en.y+dy)){en.x+=d;en.y+=dy;done=true;break;}if(done)break;}}
   rainLeft=FX.rain?3:0;rainT=360+Math.random()*240;
   for(const p of players){
     if(p.dead){p.dead=false;p.lives--;if(p.lives<=0)p.out=true;}
@@ -1660,6 +1667,13 @@ function solidRow(r,x){
   for(let c=c0;c<=c1;c++){const t=grid[r][c];if(t==='#'||t==='=')return true;}
   return false;
 }
+// walking into a block from the side: blocked (only while not rising, so jumping up through platforms still works)
+function rising(o){return upside(o)?o.vy>0:o.vy<0;}
+function sideBlock(o,nx){   // the column a body would enter at nx, if a wall or platform is in the way there; else -1
+  const dx=nx-o.x;if(!dx||rising(o))return -1;
+  const edge=x=>Math.floor((dx>0?x+13:x+2)/16),cN=edge(nx);if(cN===edge(o.x)||cN<0||cN>19)return -1;
+  for(const py of [o.y+4,o.y+11]){const r=Math.floor(py/16);if(r<0||r>=ROWS)continue;const t=grid[r][cN];if(t==='='||t==='#')return cN;}
+  return -1;}
 function moveVert(e){
   if(upside(e))return moveVertUp(e);
   const prev=e.y+16;e.y+=e.vy;const feet=e.y+16;e.onGround=false;
@@ -1904,6 +1918,7 @@ function updateEnemy(e){
   if(e.onGround){
     let nx=e.x+e.dir*sp;
     if(nx<16||nx>288){e.dir=-e.dir;nx=clampX(nx);}
+    else if(sideBlock(e,nx)>=0){e.dir=-e.dir;nx=e.x;}   // bumped into a block: turn round
     e.x=nx;
     if(e.edgeCd>0)e.edgeCd--;
     const r=upside(e)?Math.floor((e.y-1)/16):Math.floor((e.y+16)/16),fc=Math.floor((e.dir>0?e.x+12:e.x+3)/16);
@@ -1912,7 +1927,7 @@ function updateEnemy(e){
     if(below!=='='&&below!=='#'&&e.edgeCd===0){
       // critters head down off every ledge (including the hole in the bottom floor, which drops them back in
       // at the top), unless a nearby dino is above them: then they stay to jump up
-      if(wantUp)e.dir=-e.dir;
+      if(wantUp&&e.kind!=='u')e.dir=-e.dir;   // (wind-up Prickles only turn round at a wall)
       e.edgeCd=30;}
     if(e.jcd>0)e.jcd--;
     // only jump up a level when a dino close by is higher up
@@ -1921,12 +1936,13 @@ function updateEnemy(e){
       for(let rr=fr-3;rr<=fr-1;rr++)if(rr>=1&&solidRow(rr,e.x)){ledge=true;break;}
       if(ledge&&e.jcd<=0){e.vy=e.kind==='c'?-5.8:-5.6;e.jcd=(e.kind==='c'?30:50)+Math.random()*(e.kind==='c'?40:70);}
     }
-    if(e.turnCd>0)e.turnCd--;
+    if(e.kind==='u'){}   // wind-up Prickles never turn round on their own: only when they bump into a wall
+    else if(e.turnCd>0)e.turnCd--;
     else{
       if(near&&(Math.abs(t.y-e.y)<20||wantUp)&&Math.random()<0.7)e.dir=t.x<e.x?-1:1;  // face a nearby dino
       else if(!near&&Math.random()<0.15)e.dir=-e.dir;                                // otherwise mostly keep going
       e.turnCd=60+Math.random()*90;}
-  }else e.x=clampX(e.x+e.dir*sp*0.5);
+  }else{const nx=clampX(e.x+e.dir*sp*0.5);if(sideBlock(e,nx)>=0)e.dir=-e.dir;else e.x=nx;}
   if(SHOOTERS[e.kind])enemyShoot(e);
   fall(e,2.3);
   moveVert(e);
@@ -1984,7 +2000,7 @@ function spawnBonus(force){
   burst(x+8,y+8,'#ffffff',10);sfx('appear');
 }
 function collectTreat(p,t){
-  const pts=t.type===FRUIT?chainPts(t.k):TREAT_PTS[t.type];
+  const pts=t.type===FRUIT?chainPts(t.k):t.type===GEM&&t.shower?GEM_BIG_PTS[t.col||0]/10:t.type===SHOWER_FOOD?FOOD_BIG_PTS[t.food||0]/10:TREAT_PTS[t.type];
   t.dead=true;addScore(p,pts,t.x+8,t.y,pts>0);burst(t.x+8,t.y+8,'#ffd23f',6);
   if(t.type===CHEST||t.type===CANE){
     // the shower and the big item are always the same thing: a box gives diamonds in its color,
@@ -2053,7 +2069,7 @@ function convertLeftovers(prize){
       b.dead=true;burst(b.x,b.y,b.special?'#ffffff':LETTER_COL[b.letter],8);continue;}
     b.dead=true;burst(b.x,b.y,'#ffffff',5);
     const x=clampX(b.x-8),y=b.y-8;
-    if(prize){n++;treats.push(prize.bk==='g'?{x,y,vy:0,type:GEM,col:prize.bi,t:0,life:0,fall:true,dead:false}
+    if(prize){n++;treats.push(prize.bk==='g'?{x,y,vy:0,type:GEM,col:prize.bi,t:0,life:0,fall:true,shower:true,dead:false}
                                      :{x,y,vy:0,type:SHOWER_FOOD,food:prize.bi,t:0,life:0,fall:true,dead:false});}
     else if(lucky){n++;treats.push({x,y,vy:0,type:lg,food:li,t:0,life:0,fall:true,dead:false});}
   }
@@ -2088,7 +2104,9 @@ function drawWind(){   // gusts streaming across the screen the way the wind blo
 function walkX(p,mx){   // dinos walk; on ice they speed up and slow down gradually
   const want=mx*(FX.sticky?1.0:1.5);
   if(FX.ice)p.vx=(p.vx||0)+(want-(p.vx||0))*(p.onGround?0.02:0.08);else p.vx=want;   // ice: very slow to speed up or stop
-  p.x=clampX(p.x+p.vx+windNow()*WIND_PUSH+(p.kx||0)+beltPush(p));   // + pinball knock-back and conveyor belts
+  let nx=clampX(p.x+p.vx+windNow()*WIND_PUSH+(p.kx||0)+beltPush(p));   // + pinball knock-back and conveyor belts
+  const bc=sideBlock(p,nx);if(bc>=0){nx=nx>p.x?bc*16-14:(bc+1)*16-2;if(FX.ice)p.vx=0;}   // can't walk into a block
+  p.x=nx;
   if(p.kx){p.kx*=0.9;if(Math.abs(p.kx)<0.05)p.kx=0;}
   mirrorClamp(p);
 }
@@ -2321,7 +2339,8 @@ function step(){
     }}
   if(rainLeft>0&&clearT===0&&enemies.length&&--rainT<=0){   // critter rain: another critter drops in from the top
     rainT=420+Math.random()*300;rainLeft--;
-    const ks=FX.kinds,e=makeEnemy(ks[Math.floor(Math.random()*ks.length)],32+Math.random()*256,-16,false);
+    let rx=32+Math.random()*256;for(let k=0;k<20&&players.some(q=>!q.out&&!q.dead&&Math.abs(q.x-rx)<56);k++)rx=32+Math.random()*256;   // never right above a dino
+    const ks=FX.kinds,e=makeEnemy(ks[Math.floor(Math.random()*ks.length)],rx,-16,false);
     enemies.push(e);burst(e.x+8,8,'#ffffff',8);}
   if(quakeT>0)quakeT--;   // any shake (earthquakes, eruptions, the snake's bite) dies down
   if(FX.quake&&clearT===0){   // earthquakes: the screen shakes and critters on the ground hop
@@ -2339,7 +2358,7 @@ function step(){
     if(p.ride&&!p.out&&!p.dead){   // swept along by water: still pick up anything the flood passes over
       for(const t of treats)if(!t.dead&&!t.auto&&Math.abs(t.x-p.x)<15&&Math.abs(t.y-(p.y+2))<15)collectTreat(p,t);
       for(const g of bigs)if(!g.dead&&p.x+8>g.x&&p.x+8<g.x+BIGW&&p.y+8>g.y&&p.y+8<g.y+BIGW){
-        g.dead=true;addScore(p,BIG_PTS,g.x+BIGW/2,g.y+BIGW/2);sfx('bonus');burst(g.x+BIGW/2,g.y+BIGW/2,'#ffd23f',20);addText(g.x+BIGW/2,g.y+BIGW/2-10,'BIG BONUS!','#ffd23f',90);}
+        g.dead=true;addScore(p,bigPts(g),g.x+BIGW/2,g.y+BIGW/2);sfx('bonus');burst(g.x+BIGW/2,g.y+BIGW/2,'#ffd23f',20);addText(g.x+BIGW/2,g.y+BIGW/2-10,'BIG BONUS!','#ffd23f',90);}
     }
     if(p.out||p.dead||p.ride)continue;
     const pcx=p.x+8,pcy=p.y+9;
@@ -2355,7 +2374,7 @@ function step(){
     if(p.inv<=0){if(skel&&boxHit(p,skel))killPlayer(p);else for(const e of enemies){if(!e.dead&&boxHit(p,e)){killPlayer(p);break;}}}
     if(!p.dead)for(const t of treats){if(!t.dead&&!t.auto&&boxHit(p,t))collectTreat(p,t);}
     if(!p.dead)for(const g of bigs){if(!g.dead&&p.x+3<g.x+BIGW-12&&p.x+13>g.x+12&&p.y+3<g.y+BIGW&&p.y+15>g.y+16){
-      g.dead=true;addScore(p,BIG_PTS,g.x+BIGW/2,g.y+BIGW/2);sfx('bonus');burst(g.x+BIGW/2,g.y+BIGW/2,'#ffd23f',20);addText(g.x+BIGW/2,g.y+BIGW/2-10,'BIG BONUS!','#ffd23f',90);}}
+      g.dead=true;addScore(p,bigPts(g),g.x+BIGW/2,g.y+BIGW/2);sfx('bonus');burst(g.x+BIGW/2,g.y+BIGW/2,'#ffd23f',20);addText(g.x+BIGW/2,g.y+BIGW/2-10,'BIG BONUS!','#ffd23f',90);}}
   }
   for(const bd of bodies)if(!bd.dead)updateBody(bd);
   for(const t of treats)if(!t.dead)updateTreat(t);
