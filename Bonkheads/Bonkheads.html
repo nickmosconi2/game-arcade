@@ -1009,7 +1009,7 @@ function updatePest(e){e.t++;e.anim++;const PE=PESTS[e.kind];const drowsy=drowsy
     // cobras strike when a troll is close on the same level
     if(e.kind==='cobra'){const p=nearestPlayer(e.x,e.y);if(p&&Math.abs(p.y-e.y)<20&&Math.abs(wrapDX(p.x,e.x))<110&&Math.sign(wrapDX(p.x,e.x))===e.dir&&e.bt<=0){e.st='lunge';e.t=0;break;}}
     // on the floor there's nothing to bump them from: they walk out through the passage at the side and come back in at the top, angrier
-    if(e.y>=PFH&&((e.dir<0&&e.x+e.dir*sp<6)||(e.dir>0&&e.x+e.dir*sp>W-6))){e.dead=true;spawnQ.push(e.kind+'!'.repeat(Math.min(4,e.angry+1)));if(spawnT>12)spawnT=12;break;}
+    if(e.y>=PFH&&((e.dir<0&&e.x+e.dir*sp<6)||(e.dir>0&&e.x+e.dir*sp>W-6))){e.dead=true;spawnQ.push(e.kind+'!'.repeat(Math.min(5,e.angry+1)));if(spawnT>12)spawnT=12;break;}
     // spiders and bees: wait a moment, then a jump (spider) or a bouncy flight (bee); spiders slide a little when they land
     if(e.kind==='spider'||e.kind==='bee'){
       if(e.slide>0){sp*=e.slide/14;e.slide--;}
@@ -1042,10 +1042,10 @@ function updatePest(e){e.t++;e.anim++;const PE=PESTS[e.kind];const drowsy=drowsy
     if(r.side)e.dir*=-1;if(r.up)e.vy=0;if(r.down){e.vy=0;e.st='walk';e.onGround=true;if(e.jx!=null){e.jx=null;if(e.kind==='spider')e.slide=14;}}break;}
   case 'fly':{// bumped: tumbling through the air
     e.vy=Math.min(maxFall(),e.vy+grav());const r=moveBody(e,8,20,e.vx,0);if(r.side)e.vx=-e.vx;
-    if(e.vy>0){const rr=moveBody(e,8,20,0,e.vy);if(rr.down){e.vy=0;e.vx=0;if(e.wake){e.st='walk';e.t=0;e.angry=Math.min(4,e.angry+1);}else{e.st='down';e.t=0;}}}
+    if(e.vy>0){const rr=moveBody(e,8,20,0,e.vy);if(rr.down){e.vy=0;e.vx=0;if(e.wake){e.st='walk';e.t=0;e.angry=Math.min(5,e.angry+1);}else{e.st='down';e.t=0;}}}
     else{const rr=moveBody(e,8,20,0,e.vy);if(rr.up)e.vy=0;}break;}
   case 'down':{const dt=P.down*MD().down*(drowsyT>0?1.6:1);if(!onGroundAt(e.x,e.y,6)){e.st='fly';e.vy=0;e.vx=0;break;}
-    if(e.t>dt){e.st='walk';e.t=0;e.angry=Math.min(4,e.angry+1);e.dir=rnd()<0.5?-1:1;sfx('wake');}break;}
+    if(e.t>dt){e.st='walk';e.t=0;e.angry=Math.min(5,e.angry+1);e.dir=rnd()<0.5?-1:1;sfx('wake');}break;}
   case 'kick':{e.vy+=grav()*0.55;e.x+=e.vx;e.y+=e.vy;if(e.y>PFH+60||e.x<-80||e.x>W+80)e.dead=true;break;}
   case 'still':break;
   case 'die':if(e.t>8*5)e.dead=true;break;
@@ -1059,7 +1059,7 @@ function updatePest(e){e.t++;e.anim++;const PE=PESTS[e.kind];const drowsy=drowsy
     if(e.y>PFH+60||e.t>60*40)e.dead=true;break;}
   }
   e.onGround=e.st==='walk'||e.st==='enter'||e.st==='roll'||e.st==='lunge'||e.st==='down';}
-function angryMul(e){return 1+Math.min(4,e.angry||0)*0.25;}
+function angryMul(e){return Math.min(3,1+(e.angry||0));}   // each bonk makes a pest 1x faster: 2x, then 3x at most
 // pests can't walk through each other (walking ones turn round), and trolls can't walk through each other
 function separateBodies(){
   const walker=e=>e.st==='walk',solid=e=>e.st==='walk'||e.st==='down';
@@ -1308,17 +1308,31 @@ function updateBoss(){const b=boss,B=BOSSES[b.kind];b.t++;b.anim++;if(b.hitT>0)b
       for(const p of players)if(!p.dead&&!p.out&&p.vy<0&&Math.abs(wrapDX(p.x,b.x))<B.hw&&p.y-44<b.y+4&&p.y-44>b.y-20)hitBoss(p);
       if(r.down||b.t>120){b.st='walk';b.t=0;b.onGround=true;b.vy=0;}}}
   else if(b.kind==='trex'){
-    const sp=angry?6:5;
+    const hits=b.max-b.hp,sp=Math.min(14,8+hits*0.9);   // faster every time he's hit
     if(b.st==='charge'){   // running flat out across the screen; if he reaches the edge he runs right off it
       if(b.onGround&&((b.dir>0&&b.x+b.dir*sp>W-24)||(b.dir<0&&b.x+b.dir*sp<24))){b.st='exit';b.t=0;}
       else{walkBoss(b,sp);if(b.t>(angry?110:90)&&b.onGround){b.st='walk';b.t=0;}}}
-    else if(b.st==='exit'){b.x+=b.dir*sp;if(b.x<-120||b.x>W+120){b.st='hide';b.t=0;b.side=b.dir;}}
+    else if(b.st==='exit'){b.x+=b.dir*sp;if(b.x<-120||b.x>W+120){b.st='hide';b.t=0;b.side=b.dir;b.hideT=60+Math.floor(rnd()*361);}}   // hides for 1 to 7 seconds
     else if(b.st==='hide'){// out of sight for a moment, then he sprints back in on the same side, at a random level
-      if(b.t>50+((b.anim*13)%70)){const col=b.side>0?COLS-1:0,ys=[PFH];
+      if(b.t>(b.hideT||120)){const col=b.side>0?COLS-1:0,ys=[PFH];
         for(let r=5;r<ROWS;r++)if(solidAt(col,r)&&!solidAt(col,r-1)&&!solidAt(col,r-2))ys.push(r*TH);
         b.y=ys[Math.floor(rnd()*ys.length)];b.x=b.side>0?W+120:-120;b.dir=-b.side;b.vy=0;b.onGround=true;b.st='sprint';b.t=0;sfx('roar');}}
-    else if(b.st==='sprint'){b.x+=b.dir*sp;if((b.dir>0&&b.x>=40)||(b.dir<0&&b.x<=W-40)){b.st='charge';b.t=0;}}
-    else{walkBoss(b,angry?2.6:2.0);
+    else if(b.st==='sprint'){// sprints the whole way across the screen (dropping down if his platform ends) and off the far side
+      b.x+=b.dir*sp;const on=b.x>-40&&b.x<W+40;
+      if(b.onGround){if(on&&b.y<PFH&&!onGroundAt(wrapX(b.x),b.y,BOSSES.trex.hw-16)){b.onGround=false;
+        if(rnd()<0.8){// at a gap: 8 times in 10 he hops it in one go, just high enough to land on the other side at the same level
+          const row=Math.round(b.y/TH);let d=W;
+          for(let x=b.x+b.dir*8;Math.abs(x-b.x)<W;x+=b.dir*8){if(x<0||x>=W){d=Math.abs(x-b.x)+160;break;}if(solidAt(Math.floor(x/TW),row)&&Math.abs(x-b.x)>16){d=Math.abs(x-b.x)+36;break;}}
+          b.leap=true;b.lineY=b.y;b.vy=-Math.max(3,grav()*(d/sp)/2);}
+        else if(rnd()<0.5&&hopUp(b,sp)){}   // ...2 times in 10 he changes level: half the time up onto a higher platform,
+        else{b.leap=false;b.vy=0;}}}   // ...otherwise he drops down a level
+      else{b.vy=Math.min(maxFall(),b.vy+grav());const ny=b.y+b.vy;let land=-1;
+        for(let r=Math.max(0,Math.ceil((b.y-0.01)/TH));r*TH<=ny&&r<=ROWS;r++)if(r===ROWS||[b.x-20,b.x,b.x+20].some(x=>solidAt(Math.floor(wrapX(x)/TW),r))){land=r;break;}
+        if(land>=0){b.y=land*TH;b.vy=0;b.onGround=true;b.leap=false;}
+        else if(b.leap&&ny>=b.lineY){b.y=b.lineY;b.vy=-3.2*jmul();}   // still over the gap: bound on at the same height
+        else b.y=ny;}
+      if((b.dir>0&&b.x>W+120)||(b.dir<0&&b.x<-120)){b.st='hide';b.t=0;b.side=b.dir;b.hideT=60+Math.floor(rnd()*361);}}
+    else{walkBoss(b,Math.min(3.6,2.0+hits*0.2));
       if(b.onGround&&b.t>90&&rnd()<0.012){b.st='charge';b.t=0;b.dir=b.x<W/2?-1:1;sfx('roar');}}   // charges off toward the nearer side
     const onFloor=b.y>=PFH;if(b.st!=='walk'){}else
     if(b.onGround&&b.t>(onFloor?90:(angry?110:170))&&(onFloor||(tgt&&Math.abs(tgt.y-b.y)<130))){b.t=0;b.vy=-P.jumpV*jmul()*(onFloor?1.25:angry?1.15:0.95);b.onGround=false;if(tgt)b.dir=wrapDX(tgt.x,b.x)<0?-1:1;sfx('roar');}}
@@ -1346,6 +1360,13 @@ function updateBoss(){const b=boss,B=BOSSES[b.kind];b.t++;b.anim++;if(b.hitT>0)b
   // touching the boss hurts
   const bdx=p=>b.x<0||b.x>=W?p.x-b.x:wrapDX(p.x,b.x);   // off the screen edge: no wrapping round to the other side
   for(const p of players)if(!p.dead&&!p.out&&p.inv<=0&&p.powerT<=0&&b.st!=='tele'&&b.st!=='hide'&&Math.abs(bdx(p))<B.hw+6&&p.y>b.y-B.h+8&&p.y-42<b.y)hurtPlayer(p);}
+// T-Wrecks leaps up onto a higher platform ahead of him (if there is one within reach)
+function hopUp(b,sp){const row=Math.round(b.y/TH);
+  for(let r=row-3;r>=Math.max(4,row-12);r--){   // (he can leap up through a platform from below, like the other bosses)
+    for(let x=b.x;Math.abs(x-b.x)<260&&x>=0&&x<W;x+=b.dir*8){const c=Math.floor(x/TW);
+      if(solidAt(c,r)&&!solidAt(c,r-1)&&!solidAt(c,r-2)){const g=grav(),rise=b.y-r*TH+28,v=Math.sqrt(2*g*rise),t=v/g+Math.sqrt(2*28/g),need=Math.abs(x-b.x)+30;
+        b.leap=true;b.lineY=r*TH;b.vy=-v*Math.max(1,Math.sqrt(need/(sp*t)))**0.5;return true;}}}
+  return false;}
 function walkBoss(b,mul){const B=BOSSES[b.kind];
   if(b.onGround){const r=moveBody(b,B.hw-6,B.h,b.dir*mul,0);if(r.side)b.dir*=-1;if(!onGroundAt(b.x,b.y,B.hw-16)){b.onGround=false;b.vy=0;}}
   else{b.vy=Math.min(maxFall(),b.vy+grav());const r=bossFly(b,b.dir*mul*1.4);if(r.down){b.onGround=true;b.vy=0;}}}
@@ -1559,9 +1580,9 @@ function angrySprite(n,a){const k='A'+a+':'+n;if(SPR[k])return k;const s=SPR[n];
 function drawPest(e){
   if(e.kind==='tire'){const n='Tire'+frameNo(e.anim,12,2);dF(n,e.x,e.y+2);return;}
   if(e.kind==='bat'){if(e.st==='kick'){dC('BatTee_Die'+Math.min(6,1+Math.floor(e.t/5)),e.x,e.y);return;}dC(pestSprite(e),e.x,e.y);return;}
-  let n=pestSprite(e);if(e.angry>0&&e.st!=='kick')n=angrySprite(n,Math.min(3,e.angry));
+  const n=pestSprite(e);
   if(e.st==='fly'||e.st==='kick')dC(n,e.x,e.y-16);else dF(n,e.x,e.y);
-  if(e.angry&&e.st==='walk'&&(frame>>2)%6===0){ctx.globalCompositeOperation='lighter';dF(n,e.x,e.y,0.25);ctx.globalCompositeOperation='source-over';}}
+}
 function trollSprite(p){const nm=p.name,LR=p.dir<0?'L':'R';
   if(p.dead||p.stunT>0)return nm+'_Hurt';
   if(p.climb>0)return nm+'_Climb'+Math.min(8,1+Math.floor((p.climb-1)/(P.climbT/8)));
