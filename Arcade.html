@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800;900&display=swap">
+<style>
+:root{
+  --bg:#04060d;          /* the void */
+  --ink:#e6f6ff;         /* text */
+  --muted:#7f97b3;       /* secondary text */
+  --cy:#29e7ff;          /* main neon */
+  --cy-d:#0b7f97;
+  --or:#ff8a1f;          /* hosting: come join */
+  --go:#2bffb0;          /* online */
+  --busy:#b37bff;        /* in a game */
+  --off:#3d4a5e;         /* offline */
+  --panel:rgba(8,16,30,.72);
+  --edge:rgba(41,231,255,.38);
+  --f-ui:"Lexend","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-px:"Lexend","Segoe UI",system-ui,-apple-system,sans-serif;   /* friend codes: plain and easy to read */
+  --glow:0 0 6px rgba(41,231,255,.75),0 0 22px rgba(41,231,255,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--f-ui);min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--cy);outline-offset:3px;border-radius:4px}
+
+/* the world: a glowing horizon and a grid floor running off to it */
+.world{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;
+  background:radial-gradient(120% 70% at 50% 108%,rgba(41,231,255,.20),transparent 60%),radial-gradient(60% 40% at 85% 0%,rgba(179,123,255,.14),transparent 70%),
+  radial-gradient(50% 35% at 8% 10%,rgba(41,231,255,.10),transparent 70%),var(--bg)}
+.world::before{content:"";position:absolute;left:-50%;right:-50%;bottom:-4%;height:52%;transform:perspective(380px) rotateX(62deg);transform-origin:50% 100%;
+  background-image:linear-gradient(rgba(41,231,255,.75) 2px,transparent 2px),linear-gradient(90deg,rgba(41,231,255,.75) 2px,transparent 2px);
+  background-size:64px 64px;animation:run 3.2s linear infinite;
+  -webkit-mask-image:linear-gradient(to top,#000 20%,rgba(0,0,0,.6) 60%,transparent 96%);mask-image:linear-gradient(to top,#000 20%,rgba(0,0,0,.6) 60%,transparent 96%)}
+.world::after{content:"";position:absolute;left:0;right:0;top:52%;height:2px;background:linear-gradient(90deg,transparent,var(--cy) 20%,#fff 50%,var(--cy) 80%,transparent);
+  box-shadow:0 0 18px 3px rgba(41,231,255,.55);opacity:.7}
+@keyframes run{to{background-position:0 64px,0 0}}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:20px;padding:22px clamp(16px,4vw,40px) 18px;max-width:1320px;margin:0 auto}
+.mark{margin:0;line-height:0}
+.mark svg{height:34px;width:auto;overflow:visible;filter:drop-shadow(0 0 4px rgba(41,231,255,.9)) drop-shadow(0 0 14px rgba(41,231,255,.45))}
+.mark path{fill:none;stroke:var(--cy);stroke-width:3.4;stroke-linejoin:miter;stroke-linecap:square}
+.mark path.hot{stroke:#fff;stroke-width:1.2}
+.me{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:640px){.top{flex-wrap:wrap}.me{margin-left:0;width:100%;justify-content:flex-start}.field{flex:1 1 220px}.field input{flex:1}}
+.field{display:flex;align-items:center;gap:10px;background:linear-gradient(var(--cy),var(--cy)) left top/2px 100% no-repeat,var(--panel);border:1px solid var(--edge);padding:7px 8px 7px 16px}
+.field label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.field input{border:0;background:none;width:9.5ch;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 0}
+.field input:focus{outline:none}
+.field:focus-within{border-color:var(--cy);box-shadow:inset 0 0 12px rgba(41,231,255,.18)}
+.code{font:700 15px var(--f-px);letter-spacing:.12em;font-variant-numeric:tabular-nums;color:var(--cy);text-shadow:var(--glow)}
+.chip{border:1px solid var(--edge);background:rgba(41,231,255,.08);padding:3px 12px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;color:var(--cy)}
+.chip:hover{background:rgba(41,231,255,.18)}
+
+/* page grid */
+.wrap{max-width:1320px;margin:0 auto;padding:0 clamp(16px,4vw,40px) 64px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;align-items:start}
+@media (max-width:960px){.wrap{grid-template-columns:1fr}}
+
+/* a panel with a faint neon edge and bright corner brackets */
+.frame{position:relative;border:1px solid rgba(41,231,255,.26);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:0 0 40px -14px rgba(41,231,255,.5),inset 0 0 50px rgba(41,231,255,.04);
+  background:
+   linear-gradient(var(--cy),var(--cy)) left top/22px 2px no-repeat,linear-gradient(var(--cy),var(--cy)) left top/2px 22px no-repeat,
+   linear-gradient(var(--cy),var(--cy)) right top/22px 2px no-repeat,linear-gradient(var(--cy),var(--cy)) right top/2px 22px no-repeat,
+   linear-gradient(var(--cy),var(--cy)) left bottom/22px 2px no-repeat,linear-gradient(var(--cy),var(--cy)) left bottom/2px 22px no-repeat,
+   linear-gradient(var(--cy),var(--cy)) right bottom/22px 2px no-repeat,linear-gradient(var(--cy),var(--cy)) right bottom/2px 22px no-repeat,var(--panel)}
+/* featured game */
+.stage{overflow:hidden;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);min-height:420px}
+@media (max-width:760px){.stage{grid-template-columns:1fr}}
+.stage::after{content:"";position:absolute;inset:auto 0 0 0;height:3px;background:linear-gradient(90deg,transparent,var(--c,var(--cy)),transparent);box-shadow:0 0 16px var(--c,var(--cy))}
+.screen{position:relative;padding:30px;display:flex;align-items:center;justify-content:center}
+.screen img{width:100%;max-width:640px;aspect-ratio:4/3;object-fit:cover;image-rendering:pixelated;background:#000;transition:opacity .35s;
+  border:1px solid rgba(41,231,255,.6);box-shadow:0 0 0 4px rgba(4,6,13,.9),0 0 0 5px rgba(41,231,255,.35),0 0 40px -6px var(--c,var(--cy)),0 0 90px -20px var(--cy)}
+.screen .scan{position:absolute;inset:30px;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);mix-blend-mode:screen}
+.dots{position:absolute;bottom:12px;left:0;right:0;display:flex;justify-content:center;gap:6px}
+.dots button{width:18px;height:3px;border:0;padding:0;background:rgba(41,231,255,.3);cursor:pointer}
+.dots button[aria-current="true"]{background:var(--cy);width:34px;box-shadow:var(--glow)}
+.info{padding:38px 36px 34px 8px;display:flex;flex-direction:column;justify-content:center;gap:16px}
+@media (max-width:760px){.info{padding:0 26px 30px}}
+.kicker{font-size:11px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:var(--cy);text-shadow:var(--glow);margin:0}
+.info h2{font:900 clamp(34px,4vw,56px)/1 var(--f-ui);margin:0;letter-spacing:.06em;text-transform:uppercase;color:#fff;
+  text-shadow:0 0 8px var(--c,var(--cy)),0 0 30px var(--c,var(--cy));text-wrap:balance}
+.info p{margin:0;max-width:42ch;font-size:16px;color:#b6c8dc}
+.facts{display:flex;gap:8px;flex-wrap:wrap;margin:0;padding:0;list-style:none}
+.facts li{border:1px solid var(--edge);color:var(--cy);padding:3px 11px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;background:rgba(41,231,255,.06)}
+.acts{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.btn{border:0;padding:13px 26px;font-weight:800;font-size:14px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;transition:transform .08s,box-shadow .15s,background .15s;
+}
+.btn:active{transform:translateY(1px)}
+.btn.play{clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);background:var(--cy);color:#02121a;box-shadow:0 0 24px rgba(41,231,255,.6)}
+.btn.play:hover{background:#7ff1ff}
+.btn.ghost{background:rgba(255,138,31,.1);color:var(--or);box-shadow:inset 0 0 0 1.5px var(--or);text-shadow:0 0 8px rgba(255,138,31,.6)}
+.btn.ghost:hover{background:rgba(255,138,31,.2)}
+
+/* other games */
+.shelf h3,.friends h3{font:800 12px/1.2 var(--f-ui);letter-spacing:.3em;text-transform:uppercase;color:var(--cy);margin:34px 0 14px;text-shadow:var(--glow)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.tile{position:relative;background:var(--panel);border:1px solid rgba(41,231,255,.22);padding:10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s,transform .15s}
+.tile:hover{border-color:var(--cy);box-shadow:inset 0 0 22px rgba(41,231,255,.15);transform:translateY(-2px)}
+.tile img{width:100%;aspect-ratio:4/3;object-fit:cover;image-rendering:pixelated;background:var(--c)}
+.tile b{font:800 15px var(--f-ui);letter-spacing:.08em;text-transform:uppercase}
+.tile span{font-size:12px;color:var(--muted);letter-spacing:.04em}
+.tile[aria-current="true"]{border-color:var(--cy);box-shadow:inset 0 0 0 1px var(--cy),0 0 18px rgba(41,231,255,.35)}
+.empty{border:1px dashed var(--edge);padding:18px 20px;color:var(--muted);font-size:15px;max-width:60ch}
+
+/* friends */
+.friends{padding:8px 20px 22px;position:sticky;top:16px}
+.friends h3{display:flex;align-items:center;justify-content:space-between;margin-top:20px}
+.count{font:600 11px var(--f-ui);letter-spacing:.12em;color:var(--muted);text-shadow:none}
+.list{list-style:none;margin:0;padding:0}
+.row{display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:11px 0;border-top:1px solid rgba(41,231,255,.12)}
+.row:first-child{border-top:0}
+.av{width:38px;height:38px;display:grid;place-items:center;font-weight:800;color:#fff;position:relative;background:color-mix(in srgb,var(--a) 35%,#061018);border:1.5px solid var(--a);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);text-shadow:0 0 8px var(--a)}
+.who b{display:block;font-weight:700;line-height:1.2;letter-spacing:.03em}
+.who small{color:var(--muted);font-size:12.5px;line-height:1.3;display:flex;align-items:center;gap:7px}
+.who small::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--s);box-shadow:0 0 8px var(--s);flex:none}
+.row.off .av{filter:grayscale(1);opacity:.45}
+.mini{border:1px solid var(--edge);padding:6px 12px;font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;background:rgba(41,231,255,.08);color:var(--cy)}
+.mini:hover{background:rgba(41,231,255,.2)}
+.mini.join{background:var(--or);border-color:var(--or);color:#1a0a00;box-shadow:0 0 16px rgba(255,138,31,.55)}
+.x{border:0;background:none;color:var(--off);cursor:pointer;font-size:18px;padding:0 2px;line-height:1}
+.x:hover{color:var(--ink)}
+.add{display:flex;gap:8px;margin-top:16px}
+.add input{flex:1;min-width:0;border:1px solid var(--edge);padding:9px 12px;font:700 15px var(--f-px);letter-spacing:.16em;text-transform:uppercase;background:rgba(2,8,16,.8);color:var(--cy)}
+.add input::placeholder{color:#3e5b72}
+.add input:focus{outline:none;border-color:var(--cy);box-shadow:0 0 12px rgba(41,231,255,.3)}
+.add button{border:0;padding:9px 18px;font-weight:800;font-size:12px;letter-spacing:.16em;text-transform:uppercase;background:var(--cy);color:#02121a;cursor:pointer}
+.hint{font-size:12.5px;color:var(--muted);margin:10px 0 0}
+.err{color:#ff6b6b}
+.toggle{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:13px;color:var(--muted);cursor:pointer}
+.toggle input{appearance:none;width:40px;height:20px;background:#0e1a2a;border:1px solid var(--off);position:relative;cursor:pointer;margin:0;transition:all .15s}
+.toggle input::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;background:var(--off);transition:transform .15s,background .15s}
+.toggle input:checked{border-color:var(--go);box-shadow:0 0 10px rgba(43,255,176,.35)}
+.toggle input:checked::after{transform:translateX(20px);background:var(--go);box-shadow:0 0 8px var(--go)}
+.status{font-size:12px;color:var(--muted);margin:10px 0 0}
+
+/* invite popover and toast */
+.pop{position:fixed;z-index:20;background:#07101e;border:1px solid var(--cy);box-shadow:0 0 30px rgba(41,231,255,.25);padding:6px;min-width:210px}
+.pop button{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;cursor:pointer;font-weight:600;letter-spacing:.04em}
+.pop button:hover{background:rgba(41,231,255,.12);color:var(--cy)}
+.toast{position:fixed;z-index:30;left:50%;bottom:24px;transform:translateX(-50%);background:#07101e;border:1px solid var(--or);color:#fff;padding:14px 14px 14px 20px;display:flex;align-items:center;gap:14px;
+  box-shadow:0 0 30px rgba(255,138,31,.35);max-width:calc(100vw - 32px)}
+.toast[hidden]{display:none}
+.toast .btn{padding:9px 16px;font-size:12px}
+.toast .no{background:none;color:var(--muted);border:0;cursor:pointer;font-weight:600}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.world::before{animation:none}}
+</style>
+</head>
+<body>
+<div class="world" aria-hidden="true"></div>
+<header class="top">
+  <h1 class="mark" aria-label="Arcade"><svg viewBox="-2 -2 222 44" aria-hidden="true">
+    <path d="M0 40V8L8 0H20L28 8V40M0 22H28"/><path transform="translate(38)" d="M0 40V0H20L28 8V14L20 22H0M15 22L28 40"/>
+    <path transform="translate(76)" d="M28 0H8L0 8V32L8 40H28"/><path transform="translate(114)" d="M0 40V8L8 0H20L28 8V40M0 22H28"/>
+    <path transform="translate(152)" d="M0 0H18L28 10V30L18 40H0Z"/><path transform="translate(190)" d="M28 0H0V40H28M0 20H20"/></svg></h1>
+  <div class="me">
+    <div class="field"><label for="my-name">Your name</label><input id="my-name" maxlength="12" spellcheck="false"></div>
+    <div class="field"><label>Friend code</label><span class="code" id="my-code"></span><button class="chip" id="copy">Copy</button></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section aria-label="Games">
+    <div class="stage frame" id="stage">
+      <div class="screen"><img id="shot" alt=""><div class="scan"></div><div class="dots" id="dots"></div></div>
+      <div class="info">
+        <p class="kicker">Now playing</p>
+        <h2 id="g-name"></h2>
+        <p id="g-about"></p>
+        <ul class="facts" id="g-facts"></ul>
+        <div class="acts">
+          <button class="btn play" id="g-play">Play</button>
+          <button class="btn ghost" id="g-host">Host a game for friends</button>
+        </div>
+      </div>
+    </div>
+    <div class="shelf" id="shelf"></div>
+  </section>
+
+  <aside class="friends frame" aria-label="Friends">
+    <h3>Friends <span class="count" id="count"></span></h3>
+    <ul class="list" id="list"></ul>
+    <form class="add" id="add" autocomplete="off">
+      <input id="add-code" maxlength="6" placeholder="FRIEND CODE" aria-label="Friend code to add">
+      <button>Add</button>
+    </form>
+    <p class="hint" id="add-msg">Swap friend codes once. After that you'll see each other here whenever the Arcade or a game is open.</p>
+    <label class="toggle"><input type="checkbox" id="visible"> Show me as online</label>
+    <p class="status" id="status"></p>
+  </aside>
+</main>
+
+<div class="toast" id="toast" hidden role="alert">
+  <span id="toast-msg"></span>
+  <button class="btn play" id="toast-yes">Join</button>
+  <button class="no" id="toast-no">Not now</button>
+</div>
+
+<script src="games.js"></script>
+<script>
+(()=>{
+'use strict';
+/* ---------- Arcade presence: one friend code across the Arcade page and every game ----------
+   While a page is open it registers with the free PeerJS service as arcade-<friend code>, answers
+   "are you there?" from friends with what it's doing, asks its own friends the same every 8 seconds,
+   and passes on invites. Moving from the Arcade into a game (and back) hands the registration over. */
+const ARC_QS=new URLSearchParams(location.search);
+const ARC_BROKER=ARC_QS.get('broker')||'wss://0.peerjs.com:443/peerjs';
+const ARC_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const arcRand=n=>{let s='';for(let i=0;i<n;i++)s+=ARC_CHARS[Math.floor(Math.random()*ARC_CHARS.length)];return s;};
+const arcLd=(k,d)=>{try{const v=localStorage.getItem('arcade.'+k);return v===null?d:JSON.parse(v);}catch(e){return d;}};
+const arcSv=(k,v)=>{try{localStorage.setItem('arcade.'+k,JSON.stringify(v));}catch(e){}};
+(()=>{const m=location.hash.match(/arc=([^&]+)/);if(!m)return;   // identity handed over by the Arcade page
+  try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);}catch(e){}})();
+const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),
+  seen:{},ws:null,ready:false,hb:0,tries:0,
+  me:()=>({status:'arcade'}),   // the page replaces this: {status, game, gameName, join}
+  onChange:()=>{},onInvite:null,onSignal:null};
+arcSv('tag',arc.tag);
+const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
+function arcHandoff(){   // what to add to a link so the next page knows who you are
+  return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible}));}
+function arcStart(){
+  if(arc.ws||!arc.visible)return;
+  let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
+  arc.ws=ws;
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arc.onChange();}
+    else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
+      if(++arc.tries<5)setTimeout(arcStart,2500);else{arc.blocked=true;arc.onChange();}}
+    else if(m.type==='EXPIRE'){const c=arcCode(m.src);if(arc.seen[c])arc.seen[c].open=false;arc.onChange();if(arc.onSignal)arc.onSignal(m);}
+    else if(!arcSignal(m)&&arc.onSignal)arc.onSignal(m);};
+  ws.onclose=()=>{arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible)setTimeout(arcStart,5000);};
+  ws.onerror=()=>{};
+}
+function arcStop(){if(arc.ws){arc.ws.onclose=null;try{arc.ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
+function arcSend(type,code,payload){if(arc.ws&&arc.ready)arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}
+function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,name:arc.name});
+  for(const c in arc.seen)if(Date.now()-arc.seen[c].t>20000)arc.seen[c].open=false;arc.onChange();}
+setInterval(()=>{if(arc.ready)arcPing();},8000);
+function arcSignal(m){const p=m.payload||{},from=arcCode(m.src);
+  if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,name:arc.name},arc.me()));
+    if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,name:arc.name});return true;}
+  if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now()});
+    const f=arc.friends.find(f=>f.code===from);if(f&&p.name&&f.name!==p.name){f.name=p.name;arcSv('friends',arc.friends);}
+    arc.onChange();return true;}
+  if(p.invite){if(arc.onInvite)arc.onInvite(from,p);return true;}
+  return false;}
+function arcAddFriend(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(code.length!==6)return 'Friend codes are 6 letters or numbers.';if(code===arc.tag)return "That's your own code.";
+  if(arc.friends.some(f=>f.code===code))return 'Already on your list.';
+  arc.friends.push({code,name:''});arcSv('friends',arc.friends);arcPing();return '';}
+function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];arcSv('friends',arc.friends);arc.onChange();}
+function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arc.onChange();}
+function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on)arcStart();else arcStop();arc.onChange();}
+function arcFriendList(){return arc.friends.map(f=>{const s=arc.seen[f.code];return Object.assign({code:f.code,name:(s&&s.name)||f.name||f.code},
+  s&&s.open?s:{status:'offline'});});}
+function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
+
+const GAMES=(window.ARCADE_GAMES||[]);
+const $=id=>document.getElementById(id);
+const byId=id=>GAMES.find(g=>g.id===id);
+let cur=GAMES.find(g=>g.id===arcLd('last',''))||GAMES[0],shotI=0,shotT=0;
+
+// ---- going into a game ----
+function gameUrl(g,params){
+  const q=new URLSearchParams(params||{});q.set('arcade',location.href.split('#')[0].split('?')[0]);
+  const keep=ARC_QS.get('broker');if(keep)q.set('broker',keep);
+  return g.file.split('/').map(encodeURIComponent).join('/')+'?'+q.toString()+arcHandoff();}
+function go(g,params){if(!g)return;arcSv('last',g.id);arcStop();location.href=gameUrl(g,params);}
+
+// ---- featured game ----
+function shots(g){return [g.thumb].concat(g.shots||[]).filter(Boolean);}
+function feature(g){
+  cur=g;shotI=0;const st=$('stage');st.style.setProperty('--c',g.color||'#2f6fd6');
+  $('g-name').textContent=g.name;$('g-about').textContent=g.about||'';
+  $('g-facts').innerHTML='';for(const f of [g.players,g.online?'Online with friends':null,g.extra].filter(Boolean)){const li=document.createElement('li');li.textContent=f;$('g-facts').appendChild(li);}
+  $('g-host').hidden=!g.online;
+  const s=shots(g),d=$('dots');d.innerHTML='';
+  s.forEach((src,i)=>{const b=document.createElement('button');b.setAttribute('aria-label','Picture '+(i+1));b.onclick=()=>{shotI=i;showShot();restartShots();};d.appendChild(b);});
+  d.hidden=s.length<2;showShot();restartShots();
+  document.querySelectorAll('.tile').forEach(t=>t.setAttribute('aria-current',t.dataset.id===g.id?'true':'false'));
+}
+function showShot(){const s=shots(cur),img=$('shot');img.src=s[shotI]||'';img.alt=cur.name+' screenshot';
+  [...$('dots').children].forEach((b,i)=>b.setAttribute('aria-current',i===shotI?'true':'false'));}
+function restartShots(){clearInterval(shotT);if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  shotT=setInterval(()=>{const n=shots(cur).length;if(n>1){shotI=(shotI+1)%n;showShot();}},4500);}
+$('g-play').onclick=()=>go(cur);
+$('g-host').onclick=()=>go(cur,{host:1});
+
+// ---- shelf ----
+function shelf(){const el=$('shelf');el.innerHTML='';
+  if(GAMES.length<2){el.innerHTML='<h3>More games</h3><p class="empty">New games you make with Claude will show up here, ready to play.</p>';return;}
+  el.innerHTML='<h3>All games</h3>';const grid=document.createElement('div');grid.className='grid';el.appendChild(grid);
+  for(const g of GAMES){const t=document.createElement('button');t.className='tile';t.dataset.id=g.id;t.style.setProperty('--c',g.color||'#2f6fd6');
+    t.innerHTML='<img alt=""><b></b><span></span>';t.querySelector('img').src=g.thumb||'';t.querySelector('b').textContent=g.name;
+    t.querySelector('span').textContent=[g.players,g.online?'online':null].filter(Boolean).join(', ');
+    t.onclick=()=>feature(g);t.ondblclick=()=>go(g);grid.appendChild(t);}}
+
+// ---- friends ----
+const COLORS=['#e4572e','#2f6fd6','#22a95b','#b14aed','#e8931c','#0fa3b1','#d6336c','#5c6ac4'];
+function tint(code){let h=0;for(const ch of code)h=(h*31+ch.charCodeAt(0))>>>0;return COLORS[h%COLORS.length];}
+function describe(f){
+  const gn=f.gameName||(byId(f.game)||{}).name||'a game';
+  switch(f.status){
+    case 'arcade':return {text:'In the Arcade',dot:'var(--go)',act:'invite'};
+    case 'idle':return {text:'In '+gn,dot:'var(--go)',act:'invite'};
+    case 'hosting':return {text:'Hosting '+gn+', waiting for players',dot:'var(--host)',act:'join'};
+    case 'full':return {text:'Playing '+gn+' (game full)',dot:'var(--busy)'};
+    case 'playing':return {text:'Playing '+gn,dot:'var(--busy)'};
+    default:return {text:'Offline',dot:'var(--off)',off:true};}
+}
+function render(){
+  const fl=arcFriendList(),online=fl.filter(f=>f.status!=='offline').length,list=$('list');
+  $('count').textContent=fl.length?online+' of '+fl.length+' online':'';
+  list.innerHTML='';
+  if(!fl.length){const li=document.createElement('li');li.className='hint';li.style.padding='6px 0 2px';li.textContent='No friends added yet. Ask a friend for their code, or send them yours.';list.appendChild(li);}
+  const order={hosting:0,arcade:1,idle:1,playing:2,full:2,offline:3};
+  fl.sort((a,b)=>(order[a.status]??3)-(order[b.status]??3)||a.name.localeCompare(b.name));
+  for(const f of fl){const d=describe(f),li=document.createElement('li');li.className='row'+(d.off?' off':'');
+    li.innerHTML='<span class="av" aria-hidden="true"></span><span class="who"><b></b><small></small></span><span class="side"></span>';
+    const av=li.querySelector('.av');av.textContent=(f.name||'?')[0];av.style.setProperty('--a',tint(f.code));av.style.setProperty('--s',d.dot);
+    li.querySelector('b').textContent=f.name;li.querySelector('small').textContent=d.text;
+    const side=li.querySelector('.side');
+    if(d.act==='join'&&byId(f.game)&&f.join){const b=document.createElement('button');b.className='mini join';b.textContent='Join';b.onclick=()=>go(byId(f.game),{join:f.join});side.appendChild(b);}
+    else if(d.act==='invite'&&GAMES.some(g=>g.online)){const b=document.createElement('button');b.className='mini';b.textContent='Invite';b.onclick=e=>inviteMenu(e.currentTarget,f);side.appendChild(b);}
+    else if(d.off){const x=document.createElement('button');x.className='x';x.title='Remove '+f.name;x.setAttribute('aria-label','Remove '+f.name);x.textContent='×';
+      x.onclick=()=>{if(confirmRemove(f))arcRemoveFriend(f.code);};side.appendChild(x);}
+    list.appendChild(li);}
+  $('visible').checked=arc.visible;
+  $('status').textContent=!arc.visible?'You are hidden. Friends see you as offline.':arc.blocked?'The Arcade is open in another window, so this one stays offline.':arc.ready?'':'Connecting…';
+}
+function confirmRemove(f){return window.confirm?confirm('Remove '+f.name+' from your friends?'):true;}
+let pop=null;
+function closePop(){if(pop){pop.remove();pop=null;}}
+function inviteMenu(btn,f){closePop();const games=GAMES.filter(g=>g.online);
+  if(games.length===1){go(games[0],{host:1,invite:f.code});return;}
+  pop=document.createElement('div');pop.className='pop';pop.setAttribute('role','menu');
+  for(const g of games){const b=document.createElement('button');b.setAttribute('role','menuitem');b.textContent='Play '+g.name;b.onclick=()=>go(g,{host:1,invite:f.code});pop.appendChild(b);}
+  document.body.appendChild(pop);const r=btn.getBoundingClientRect();pop.style.top=(r.bottom+6)+'px';pop.style.left=Math.max(8,r.right-pop.offsetWidth)+'px';
+  pop.querySelector('button').focus();}
+document.addEventListener('click',e=>{if(pop&&!pop.contains(e.target)&&!e.target.classList.contains('mini'))closePop();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePop();});
+
+// ---- invites arriving here ----
+let invited=null;
+arc.onInvite=(from,p)=>{const g=byId(p.game);invited={g,p};
+  $('toast-msg').textContent=g?(p.name+' invites you to play '+g.name+'.'):(p.name+" invites you to play "+(p.gameName||'a game')+", which isn't in your Arcade yet. Ask them to send it to you.");
+  $('toast-yes').hidden=!g||!p.join;$('toast').hidden=false;$('toast-yes').focus();};
+$('toast-yes').onclick=()=>{if(invited&&invited.g)go(invited.g,{join:invited.p.join});};
+$('toast-no').onclick=()=>{$('toast').hidden=true;invited=null;};
+
+// ---- you ----
+$('my-code').textContent=arc.tag;$('my-name').value=arc.name==='PLAYER'?'':arc.name;$('my-name').placeholder='PLAYER';
+$('my-name').addEventListener('change',e=>arcSetName(e.target.value));
+$('my-name').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(arc.tag);$('copy').textContent='Copied';}catch(e){$('copy').textContent=arc.tag;}setTimeout(()=>$('copy').textContent='Copy',1500);};
+$('add').onsubmit=e=>{e.preventDefault();const err=arcAddFriend($('add-code').value);const m=$('add-msg');
+  m.classList.toggle('err',!!err);m.textContent=err||'Added. They show as online when their Arcade or a game is open.';if(!err)$('add-code').value='';render();};
+$('visible').onchange=e=>arcSetVisible(e.target.checked);
+arc.me=()=>({status:'arcade'});arc.onChange=render;
+
+// a game whose folder has been deleted is left out: its picture won't load any more
+function gameThere(g){const pic=g.thumb||(g.shots&&g.shots[0]);if(!pic)return Promise.resolve(true);
+  return new Promise(res=>{const im=new Image();let done=false;const fin=v=>{if(!done){done=true;res(v);}};im.onload=()=>fin(true);im.onerror=()=>fin(false);setTimeout(()=>fin(true),4000);im.src=pic;});}
+Promise.all(GAMES.map(gameThere)).then(ok=>{
+  for(let i=GAMES.length-1;i>=0;i--)if(!ok[i])GAMES.splice(i,1);
+  if(!GAMES.includes(cur))cur=GAMES[0];
+  if(GAMES.length){shelf();feature(cur);}else{$('stage').hidden=true;$('shelf').innerHTML='<p class="empty">No games here yet.</p>';}
+  render();});
+render();arcStart();
+window.addEventListener('pagehide',arcStop);
+})();
+</script>
+</body>
+</html>
