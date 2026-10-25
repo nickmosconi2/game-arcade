@@ -578,8 +578,17 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=43;   // goes up by one with every update
+const GAME_BUILD=44;   // goes up by one with every update
 const GAME_ID='bubnbob2',GAME_NAME='Bub & Bob 2';
+const SNAP_SMOOTH={P:[1,2],E:[1,2],B:[0,1],T:[4,5],D:[1,2],X:[1,2],RD:[1,2],S:[0,1]};   // online guest: what moves, so it glides between snapshots
+function snapLerp(a,b,t,spec){if(t>=1)return b;const o=Object.assign({},b);   // same blend as the Online Kit's (this game has its own connection code)
+  const mix=(x,y,fs)=>{const r=Array.isArray(y)?y.slice():Object.assign({},y);
+    for(const f of fs){const p=x[f],q=y[f];if(typeof p!=='number'||typeof q!=='number'||Math.abs(q-p)>96)continue;r[f]=p+(q-p)*t;}return r;};
+  for(const k in spec){const A=a[k],B=b[k];if(!A||!B||typeof A!=='object'||typeof B!=='object')continue;
+    if(Array.isArray(B)&&B.length&&B[0]!==null&&typeof B[0]==='object'){if(!Array.isArray(A)||A.length!==B.length)continue;
+      o[k]=B.map((y,i)=>A[i]&&typeof A[i]==='object'?mix(A[i],y,spec[k]):y);}
+    else o[k]=mix(A,B,spec[k]);}
+  return o;}
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
    One friend code across the Arcade page and every game. While a page is open it registers with the free
@@ -701,7 +710,7 @@ function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as
   arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
 function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
   const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
-  return /\/Arcade\.html$/i.test(here)?here:new URL('../Arcade.html',here).href;}
+  if(/\/Arcade\.html$/i.test(here))return here;try{return new URL('../Arcade.html',here).href;}catch(e){return '';}}   // a preview has no folder: no Arcade
 function arcGoPlay(gameId,params){   // open any game (host, join, invite) through the Arcade page, which knows where each game lives
   const q=new URLSearchParams(params||{});q.set('go',gameId);const b=ARC_QS.get('broker');if(b)q.set('broker',b);
   arcStop();location.href=arcArcadeUrl()+'?'+q.toString()+arcHandoff();}
@@ -2946,7 +2955,10 @@ let acc=0,last=performance.now();
 function tick(now){
   acc+=Math.min(100,now-last);last=now;
   if(net.role==='guest'){                 // the guest draws what the host sends, plus its own Bob predicted locally
-    if(net.snap){applySnap(net.snap);guestReconcile(net.snap);net.snap=null;}
+    if(net.snap){net.sPrev=net.sCur;net.sPrevAt=net.sCurAt;net.sCur=net.snap;net.sCurAt=now;net.sDone=false;guestReconcile(net.snap);net.snap=null;}
+    if(net.sCur&&!net.sDone){   // glide from the last snapshot to the newest instead of jumping
+      const span=Math.min(250,Math.max(12,net.sCurAt-(net.sPrevAt||0))),t=net.sPrev?Math.min(1,(now-net.sCurAt)/span):1;
+      applySnap(t<1?snapLerp(net.sPrev,net.sCur,t,SNAP_SMOOTH):net.sCur);if(t>=1)net.sDone=true;}
     while(acc>=1000/60){guestStep();acc-=1000/60;}
     guestOverlay();draw();requestAnimationFrame(tick);return;}
   let stepped=false;

@@ -1,6 +1,15 @@
 /* The games in this Arcade, one folder each. Claude adds an entry here for every new game.
    file and pictures are paths from this folder. color is the backdrop behind the game's pictures. */
 window.ARCADE_GAMES=[
+  {id:'meanbean',
+   name:"Dr. Robotnik's Mean Bean Machine",
+   file:"Dr Robotnic's Mean Bean Machine/Mean Bean Machine.html",
+   thumb:"Dr Robotnic's Mean Bean Machine/thumb.png",
+   shots:["Dr Robotnic's Mean Bean Machine/shot1.png","Dr Robotnic's Mean Bean Machine/shot2.png"],
+   color:'#3fae3a',
+   players:'1–2 players',
+   online:true,
+   about:'Line up four beans of a colour to pop them and bury your opponent in refugee beans: all 13 Scenario stages against Robotnik\'s henchbots, head-to-head 2P (online too) and Exercise mode.'},
   {id:'bonkheads',
    name:'Bonkheads',
    file:'Bonkheads/Bonkheads.html',

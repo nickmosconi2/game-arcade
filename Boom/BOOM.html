@@ -507,8 +507,9 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=18;   // goes up by one with every update
+const GAME_BUILD=19;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
+const SNAP_SMOOTH={P:[1,2],E:[1,2],S:[0,1],X:[1,2]};   // online guests: what moves, so it glides between snapshots (see the Online Kit)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
    One friend code across the Arcade page and every game. While a page is open it registers with the free
@@ -630,7 +631,7 @@ function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as
   arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
 function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
   const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
-  return /\/Arcade\.html$/i.test(here)?here:new URL('../Arcade.html',here).href;}
+  if(/\/Arcade\.html$/i.test(here))return here;try{return new URL('../Arcade.html',here).href;}catch(e){return '';}}   // a preview has no folder: no Arcade
 function arcGoPlay(gameId,params){   // open any game (host, join, invite) through the Arcade page, which knows where each game lives
   const q=new URLSearchParams(params||{});q.set('go',gameId);const b=ARC_QS.get('broker');if(b)q.set('broker',b);
   arcStop();location.href=arcArcadeUrl()+'?'+q.toString()+arcHandoff();}
@@ -1372,11 +1373,15 @@ function applySnap(s){
    The game provides: GAME_ID, GAME_NAME, GAME_BUILD (+1 every update), SELF_HTML, MAX_PLAYERS, ACTIONS, input[],
    startGame(n), packSnap(), applySnap(s), gameStatus() -> 'idle'|'solo'|'playing', onLobbyChange(),
    onInvite(code,name,payload), onUpdateReady(build). Its loop is split into advance(now) (stepping + sendSnap) and
-   tick(now){advance(now);draw();requestAnimationFrame(tick);}, followed by netKeepRunning(advance). See CLAUDE.md. */
+   tick(now){advance(now);draw();requestAnimationFrame(tick);}, followed by netKeepRunning(advance). See CLAUDE.md.
+   Less lag for guests: if the game defines SNAP_SMOOTH (which snapshot fields move: {listKey:[field,...]}, a field
+   written '~f' is an angle in radians), guests see things glide from one snapshot to the next instead of jumping.
+   netPending(action) tells a guest how many of its own presses the host hasn't acted on yet, so the game can draw
+   them straight away. The relay sends every second snapshot, and only the parts that changed. */
 const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun2.l.google.com:19302']},
   {urls:'stun:stun.cloudflare.com:3478'},
   {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
-const RELAY_AFTER=6000,RELAY_EVERY=3,JOIN_GIVEUP=25000,QUIET_DROP=9000;
+const RELAY_AFTER=6000,RELAY_EVERY=2,RELAY_FULL=30,SNAP_JUMP=96,JOIN_GIVEUP=25000,QUIET_DROP=9000;
 const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,fr:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false};
 const send=(type,code,payload)=>arcSend(type,code,Object.assign({game:GAME_ID},payload));
 function lobbyChanged(){if(typeof onLobbyChange==='function')onLobbyChange();}
@@ -1470,17 +1475,26 @@ function lobbyPlayers(){   // host: who is in, by player number
 function startOnlineGame(){const n=Math.max(...lobbyPlayers().map(p=>p.slot))+1;startGame(n);}
 function hostInput(slot,m,code){const i=input[slot];if(!i)return;const rc=net.rc[code]=net.rc[code]||{};
   for(const a of ACTIONS){i[a]=!!(m.g&&m.g[a]);const n=(m.c&&m.c[a])||0;if(n>(rc[a]||0)){rc[a]=n;i[a+'P']=true;}}}
-function sendSnap(){let s=null;net.fr++;
+function sendSnap(){let obj=null,full=null,parts=null;net.fr++;
   for(const c in net.guests){const g=net.guests[c],ch=g.ch;if(g.upd||!ch||ch.readyState!=='open'||ch.bufferedAmount>65536)continue;
-    if(ch.relay&&net.fr%RELAY_EVERY)continue;   // the relay gets every third picture
-    if(!s)s=JSON.stringify(Object.assign({k:'s',sq:++net.seq},packSnap()));try{ch.send(s);}catch(e){}}}
+    if(ch.relay&&net.fr%RELAY_EVERY)continue;   // the relay gets every second picture...
+    if(!obj){const ak={};for(const k in net.guests){const h=net.guests[k];if(!h.upd)ak[h.slot]=net.rc[k]||{};}   // which presses each guest has had acted on
+      obj=Object.assign({k:'s',sq:++net.seq,ak},packSnap());}
+    if(ch.relay){   // ...and only the parts that changed (the relay delivers in order, so the guest can piece them together)
+      if(!parts){parts={};for(const k in obj)if(k!=='k'&&k!=='sq')parts[k]=JSON.stringify(obj[k]);}
+      const last=ch.lastParts;ch.sentN=(ch.sentN||0)+1;ch.lastParts=parts;
+      if(!last||ch.sentN%RELAY_FULL===0){full=full||JSON.stringify(obj);try{ch.send(full);}catch(e){}continue;}
+      let d='{"k":"s","sq":'+obj.sq+',"d":1';for(const k in parts)if(parts[k]!==last[k])d+=','+JSON.stringify(k)+':'+parts[k];
+      const gone=Object.keys(last).filter(k=>!(k in parts));if(gone.length)d+=',"_x":'+JSON.stringify(gone);
+      try{ch.send(d+'}');}catch(e){}continue;}
+    full=full||JSON.stringify(obj);try{ch.send(full);}catch(e){}}}
 function anyGuests(){return Object.values(net.guests).some(g=>!g.upd&&g.ch&&g.ch.readyState==='open');}
 // --- guest ---
 function joinGame(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(net.role||code.length!==6)return;
   if(code===arc.tag){say("That's your own friend code. Type your friend's code instead.");return;}
   if(!arc.ready){say('Connecting to the online service… joining as soon as it is ready.');const t=setInterval(()=>{if(arc.ready){clearInterval(t);joinGame(code);}},300);setTimeout(()=>clearInterval(t),15000);return;}
   if(!arcIsFriend(code))arcAddFriend(code);   // people you play with become friends, on both lists
-  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};const f=arc.friends.find(f=>f.code===code);say('Connecting to '+((f&&f.name)||code)+'…');
+  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};net.base=null;net.prevSnap=net.curSnap=null;net.ack=null;const f=arc.friends.find(f=>f.code===code);say('Connecting to '+((f&&f.name)||code)+'…');
   const pc=newPC(code);net.pc=pc;
   wireHostLink(pc.createDataChannel('game',{ordered:false,maxRetransmits:0}));
   wireFile(pc.createDataChannel('file',{ordered:true}),null,()=>leaveOnline());
@@ -1495,7 +1509,10 @@ function useRelay(){if(net.role!=='guest'||net.upd||(net.ch&&net.ch.relay))retur
 function wireHostLink(ch){net.ch=ch;const mine=()=>net.ch===ch;
   ch.onopen=()=>{if(!mine())return;net.lastHeard=Date.now();if(net.peerBuild!==GAME_BUILD){net.upd=true;return;}say('Connected! You are player '+(net.slot+1)+'.');lobbyChanged();};
   ch.onclose=()=>{if(!mine())return;if(net.role==='guest'&&!net.upd){if(!ch.relay&&net.pc){useRelay();return;}say('The host closed the game.');leaveOnline();}};
-  ch.onmessage=e=>{if(!mine())return;net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k==='s'&&m.sq>net.lastSeq){net.lastSeq=m.sq;net.snap=m;}};}
+  ch.onmessage=e=>{if(!mine())return;net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k!=='s'||m.sq<=net.lastSeq)return;
+    if(m.d){if(!net.base)return;const x=m._x;m=Object.assign({},net.base,m);delete m.d;delete m._x;if(x)for(const k of x)delete m[k];}
+    net.base=m;net.lastSeq=m.sq;net.ack=(m.ak&&m.ak[net.slot])||null;
+    net.prevSnap=net.curSnap;net.prevAt=net.curAt;net.curSnap=m;net.curAt=performance.now();net.smDone=false;net.snap=m;};}
 function guestKey(a,down){const g=net.gIn;if(down&&!g[a])net.cnt[a]=(net.cnt[a]||0)+1;g[a]=down?1:0;sendInput();}
 function sendInput(){if(net.ch&&net.ch.readyState==='open')try{net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt}));}catch(e){}}
 setInterval(()=>{if(net.role==='guest')sendInput();},100);
@@ -1503,7 +1520,23 @@ setInterval(()=>{const now=Date.now();   // someone closed their game without sa
   if(net.role==='host')for(const c in net.guests){const g=net.guests[c];if(!g.upd&&g.ch&&g.ch.readyState==='open'&&now-(g.last||now)>QUIET_DROP)dropPeer(c,g.name+' left the game.');}
   if(net.role==='guest'&&!net.upd&&net.ch&&net.ch.readyState==='open'){const q=now-(net.lastHeard||now);
     if(q>2500&&!net.ch.relay)useRelay();if(q>QUIET_DROP){say('Lost the connection to the host.');leaveOnline();}}},1000);
-function guestFrame(){if(net.snap){applySnap(net.snap);net.snap=null;}}
+function guestFrame(){const sm=typeof SNAP_SMOOTH!=='undefined'?SNAP_SMOOTH:null;
+  if(sm&&net.prevSnap&&net.curSnap){if(net.smDone)return;   // glide from the last snapshot to the newest over the time between them
+    const span=Math.min(250,Math.max(12,net.curAt-net.prevAt)),t=Math.min(1,(performance.now()-net.curAt)/span);
+    applySnap(snapLerp(net.prevSnap,net.curSnap,t,sm));net.snap=null;if(t>=1)net.smDone=true;return;}
+  if(net.snap){applySnap(net.snap);net.snap=null;}}
+function snapLerp(a,b,t,spec){if(t>=1)return b;const o=Object.assign({},b);
+  const mix=(x,y,fs)=>{const r=Array.isArray(y)?y.slice():Object.assign({},y);
+    for(const f0 of fs){const ang=typeof f0==='string'&&f0[0]==='~',f=ang?f0.slice(1):f0,p=x[f],q=y[f];if(typeof p!=='number'||typeof q!=='number')continue;
+      let d=q-p;if(ang)d=((d+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;else if(Math.abs(d)>SNAP_JUMP)continue;r[f]=p+d*t;}
+    return r;};
+  for(const k in spec){const A=a[k],B=b[k];if(!A||!B||typeof A!=='object'||typeof B!=='object')continue;
+    if(Array.isArray(B)&&B.length&&B[0]!==null&&typeof B[0]==='object'){if(!Array.isArray(A)||A.length!==B.length)continue;
+      o[k]=B.map((y,i)=>A[i]&&typeof A[i]==='object'?mix(A[i],y,spec[k]):y);}
+    else o[k]=mix(A,B,spec[k]);}
+  return o;}
+// a guest's own presses the host hasn't acted on yet (for drawing them straight away)
+function netPending(a){return net.role==='guest'?Math.max(0,(net.cnt[a]||0)-((net.ack&&net.ack[a])||0)):0;}
 // keeps a hosted game running while its tab is hidden (browsers stop drawing hidden tabs, which would freeze every guest)
 function netKeepRunning(advance){let w=null;
   const sync=()=>{const need=document.hidden&&net.role==='host';

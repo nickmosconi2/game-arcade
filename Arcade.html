@@ -376,7 +376,7 @@ function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as
   arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
 function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
   const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
-  return /\/Arcade\.html$/i.test(here)?here:new URL('../Arcade.html',here).href;}
+  if(/\/Arcade\.html$/i.test(here))return here;try{return new URL('../Arcade.html',here).href;}catch(e){return '';}}   // a preview has no folder: no Arcade
 function arcGoPlay(gameId,params){   // open any game (host, join, invite) through the Arcade page, which knows where each game lives
   const q=new URLSearchParams(params||{});q.set('go',gameId);const b=ARC_QS.get('broker');if(b)q.set('broker',b);
   arcStop();location.href=arcArcadeUrl()+'?'+q.toString()+arcHandoff();}
