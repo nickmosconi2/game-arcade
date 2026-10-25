@@ -59,6 +59,13 @@ button,input{font:inherit;color:inherit}
 .chip{border:1px solid var(--edge);background:rgba(41,231,255,.08);padding:3px 12px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;color:var(--cy)}
 .chip:hover{background:rgba(41,231,255,.18)}
 
+/* top bar shares the page's columns: logo + background on the left, name + invite over the Friends panel */
+.top{display:grid;grid-template-columns:auto minmax(0,1fr) 340px;column-gap:28px}
+.top .bgpick{justify-self:start}
+.top .me{margin-left:0;width:100%;justify-content:stretch;flex-wrap:nowrap}
+.top .me .field{flex:1;min-width:0}.top .me .field input{flex:1;min-width:0;width:auto}
+@media (max-width:960px){.top{grid-template-columns:auto 1fr;row-gap:12px}.top .me{grid-column:1/-1}}
+@media (max-width:640px){.top{grid-template-columns:minmax(0,1fr)}.top .bgpick{justify-self:stretch}.top .me{flex-wrap:wrap}.top .me .field{flex:1 1 100%}}
 /* page grid */
 .wrap{max-width:1320px;margin:0 auto;padding:0 clamp(16px,4vw,40px) 64px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;align-items:start}
 @media (max-width:960px){.wrap{grid-template-columns:1fr}}
@@ -171,19 +178,41 @@ button,input{font:inherit;color:inherit}
 .toast[hidden]{display:none}
 .toast .btn{padding:9px 16px;font-size:12px}
 .toast .no{background:none;color:var(--muted);border:0;cursor:pointer;font-weight:600}
+/* background switcher: Tron (the neon grid), Mall Arcade, Lorenzo's */
+.bgpick{display:flex;align-items:center;gap:10px;border:1px solid var(--edge);background:linear-gradient(var(--cy),var(--cy)) left top/2px 100% no-repeat,var(--panel);padding:5px 8px 5px 14px;cursor:pointer}
+.bgpick span{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.bgpick select{appearance:none;-webkit-appearance:none;border:0;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2329e7ff'/%3E%3C/svg%3E") right 4px center/10px 6px no-repeat;
+  color:var(--cy);font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:4px 22px 4px 2px;cursor:pointer}
+.bgpick select option{background:#07101e;color:var(--ink);text-transform:none;letter-spacing:normal}
+@media (max-width:640px){.bgpick{order:1}}
+html[data-bg="mall"] .world,html[data-bg="lorenzos"] .world{background:
+  radial-gradient(120% 90% at 50% 45%,rgba(4,6,13,.10),rgba(4,6,13,.70) 100%),
+  linear-gradient(rgba(4,6,13,.25),rgba(4,6,13,.45)),
+  var(--photo) center 60%/cover no-repeat,var(--bg)}
+html[data-bg="mall"]{--photo:url("Backgrounds/Arcade Mall 2.jpg")}
+html[data-bg="lorenzos"]{--photo:url("Backgrounds/Background Lorenzos.jpg")}
+html[data-bg="lorenzos"] .world{background:
+  radial-gradient(120% 90% at 50% 45%,rgba(4,6,13,.20),rgba(4,6,13,.75) 100%),
+  linear-gradient(rgba(4,6,13,.35),rgba(4,6,13,.50)),
+  var(--photo) center 55%/cover no-repeat,var(--bg)}
+html[data-bg="mall"] .world::before,html[data-bg="mall"] .world::after,
+html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{display:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}.world::before{animation:none}}
 </style>
 </head>
 <body>
 <div class="world" aria-hidden="true"></div>
+<script>/* show the saved background straight away */try{var b=JSON.parse(localStorage.getItem('arcade.bg'));if(b==='mall'||b==='lorenzos')document.documentElement.dataset.bg=b;}catch(e){}</script>
 <header class="top">
   <h1 class="mark" aria-label="Arcade"><svg viewBox="-2 -2 222 44" aria-hidden="true">
     <path d="M0 40V8L8 0H20L28 8V40M0 22H28"/><path transform="translate(38)" d="M0 40V0H20L28 8V14L20 22H0M15 22L28 40"/>
     <path transform="translate(76)" d="M28 0H8L0 8V32L8 40H28"/><path transform="translate(114)" d="M0 40V8L8 0H20L28 8V40M0 22H28"/>
     <path transform="translate(152)" d="M0 0H18L28 10V30L18 40H0Z"/><path transform="translate(190)" d="M28 0H0V40H28M0 20H20"/></svg></h1>
+  <label class="bgpick"><span>Background</span>
+    <select id="bg-pick"><option value="tron">Tron</option><option value="mall">Mall Arcade</option><option value="lorenzos">Lorenzo's</option></select></label>
   <div class="me">
     <div class="field"><label for="my-name">Your name</label><input id="my-name" maxlength="12" spellcheck="false"></div>
-    <button class="chip big" id="link">Copy invite link</button>
+    <button class="chip big" id="link" title="Copy a link that adds you as a friend">Invite</button>
   </div>
 </header>
 
@@ -210,13 +239,6 @@ button,input{font:inherit;color:inherit}
     <ul class="list" id="list"></ul>
     <h3 class="sub">Everyone online <span class="count" id="ev-count"></span></h3>
     <ul class="list" id="everyone"></ul>
-    <details class="bycode"><summary>Add a friend by code</summary>
-      <p class="hint">Your code: <span class="code" id="my-code"></span> <button class="chip" id="copy" type="button">Copy</button></p>
-      <form class="add" id="add" autocomplete="off">
-        <input id="add-code" maxlength="6" placeholder="FRIEND CODE" aria-label="Friend code to add">
-        <button>Add</button>
-      </form>
-    </details>
     <p class="hint" id="add-msg">Click anyone to invite them or join their game. People you play with become friends, so you'll see them here next time too.</p>
     <label class="toggle"><input type="checkbox" id="visible"> Show me as online</label>
     <p class="status" id="status"></p>
@@ -464,10 +486,9 @@ $('toast-yes').onclick=()=>{if(invited&&invited.g)go(invited.g,{join:invited.p.j
 $('toast-no').onclick=()=>{$('toast').hidden=true;invited=null;};
 
 // ---- you ----
-$('my-code').textContent=arc.tag;$('my-name').value=arc.name==='PLAYER'?'':arc.name;$('my-name').placeholder='PLAYER';
+$('my-name').value=arc.name==='PLAYER'?'':arc.name;$('my-name').placeholder='PLAYER';
 $('my-name').addEventListener('change',e=>arcSetName(e.target.value));
 $('my-name').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
-$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(arc.tag);$('copy').textContent='Copied';}catch(e){$('copy').textContent=arc.tag;}setTimeout(()=>$('copy').textContent='Copy',1500);};
 function inviteLink(){const here=location.href.split('#')[0].split('?')[0];return (/^https?:/.test(here)?here:ARC_HOME+'Arcade.html')+'?add='+arc.tag;}
 $('link').onclick=async()=>{const url=inviteLink(),m=$('add-msg');m.classList.remove('err');
   try{if(navigator.share&&matchMedia('(pointer:coarse)').matches){await navigator.share({title:'Play with me in the Arcade',url});return;}}catch(e){if(e&&e.name==='AbortError')return;}
@@ -477,8 +498,6 @@ arc.onFriendAdded=name=>{const m=$('add-msg');m.classList.remove('err');m.textCo
 {const add=ARC_QS.get('add');if(add){const err=arcAddFriend(add),m=$('add-msg');
   if(!err||err==='Already on your list.'){m.textContent="You're now friends with "+add.toUpperCase()+'. Type your name above so they know who you are.';}else{m.classList.add('err');m.textContent=err;}
   try{const q=new URLSearchParams(location.search);q.delete('add');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}catch(e){}}}
-$('add').onsubmit=e=>{e.preventDefault();const err=arcAddFriend($('add-code').value);const m=$('add-msg');
-  m.classList.toggle('err',!!err);m.textContent=err||"Added. You'll be on each other's lists, and they show as online whenever their Arcade or a game is open.";if(!err)$('add-code').value='';render();};
 $('visible').onchange=e=>arcSetVisible(e.target.checked);
 arc.me=()=>({status:'arcade'});arc.onChange=render;
 const GO=ARC_QS.get('go');
@@ -496,6 +515,15 @@ Promise.all(GAMES.map(gameThere)).then(ok=>{
   render();});
 render();arcStart();
 window.addEventListener('pagehide',arcStop);
+})();
+</script>
+<script>
+/* background switcher: remembered on this computer */
+(function(){
+  const root=document.documentElement,sel=document.getElementById('bg-pick');
+  function show(b){if(b==='tron')delete root.dataset.bg;else root.dataset.bg=b;sel.value=b;}
+  sel.addEventListener('change',()=>{show(sel.value);try{localStorage.setItem('arcade.bg',JSON.stringify(sel.value));}catch(e){}});
+  show(root.dataset.bg||'tron');
 })();
 </script>
 </body>
