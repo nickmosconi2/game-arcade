@@ -95,8 +95,9 @@ button,input{font:inherit;color:inherit}
 .info h2{font:900 clamp(34px,4vw,56px)/1 var(--f-ui);margin:0;letter-spacing:.06em;text-transform:uppercase;color:#fff;
   text-shadow:0 0 8px var(--c,var(--cy)),0 0 30px var(--c,var(--cy));text-wrap:balance}
 .info p{margin:0;max-width:42ch;font-size:16px;color:#b6c8dc}
-.facts{display:flex;gap:8px;flex-wrap:wrap;margin:0;padding:0;list-style:none}
-.facts li{border:1px solid var(--edge);color:var(--cy);padding:3px 11px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;background:rgba(41,231,255,.06)}
+.facts{display:flex;flex-wrap:wrap;margin:0;padding:0;list-style:none}
+.facts li{color:var(--muted);font-size:13.5px;font-weight:500;letter-spacing:.03em}
+.facts li+li::before{content:"·";margin:0 10px;color:var(--cy-d);font-weight:800}
 .acts{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
 .btn{border:0;padding:13px 26px;font-weight:800;font-size:14px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;transition:transform .08s,box-shadow .15s,background .15s;
 }
@@ -106,6 +107,25 @@ button,input{font:inherit;color:inherit}
 .btn.ghost{background:rgba(255,138,31,.1);color:var(--or);box-shadow:inset 0 0 0 1.5px var(--or);text-shadow:0 0 8px rgba(255,138,31,.6)}
 .btn.ghost:hover{background:rgba(255,138,31,.2)}
 
+.lead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;font-size:15px;color:#b6c8dc}
+.lead b{color:var(--ink)}
+.lead a{color:var(--cy);font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;border-bottom:1px solid transparent}
+.lead a:hover{border-bottom-color:var(--cy)}
+@media (max-height:900px) and (min-width:761px){
+  .stage{min-height:0}
+  .screen{padding:18px}.screen .scan{inset:18px}
+  .screen img{max-width:min(640px,calc((100vh - 330px)*4/3))}
+  .info{padding:22px 28px 22px 4px;gap:12px}
+  .info h2{font-size:clamp(28px,3.1vw,44px)}
+  .info p{font-size:15px}
+  .acts{margin-top:2px}.btn{padding:11px 22px}
+  .shelf h3{margin-top:22px}}
+@media (max-height:740px) and (min-width:761px){
+  .top{padding-top:14px;padding-bottom:10px}
+  .info{gap:10px;padding-top:16px;padding-bottom:16px}
+  .info h2{font-size:clamp(24px,2.6vw,36px)}
+  .info p{font-size:14px}
+  .acts{flex-wrap:nowrap}.btn{padding:10px 16px;font-size:12.5px;letter-spacing:.12em;white-space:nowrap}}
 /* other games */
 .shelf h3,.friends h3{font:800 12px/1.2 var(--f-ui);letter-spacing:.3em;text-transform:uppercase;color:var(--cy);margin:34px 0 14px;text-shadow:var(--glow)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
@@ -148,6 +168,8 @@ button,input{font:inherit;color:inherit}
 .toggle input:checked{border-color:var(--go);box-shadow:0 0 10px rgba(43,255,176,.35)}
 .toggle input:checked::after{transform:translateX(20px);background:var(--go);box-shadow:0 0 8px var(--go)}
 .status{font-size:12px;color:var(--muted);margin:10px 0 0}
+.more{border:0;background:none;color:var(--cy);font-size:12.5px;font-weight:600;letter-spacing:.04em;padding:8px 0 0;cursor:pointer}
+.more:hover{text-decoration:underline}
 
 /* everyone online, add by code */
 .friends h3.sub{font-size:11px;margin:22px 0 8px;display:flex;justify-content:space-between}
@@ -165,7 +187,9 @@ button,input{font:inherit;color:inherit}
 .pop-n{margin:4px 12px 8px;font-size:13px;color:var(--muted);max-width:240px}
 .pop button.join{color:var(--or)}
 .pop button.rm{color:var(--muted);font-weight:500;font-size:13px;border-top:1px solid rgba(41,231,255,.12);margin-top:4px}
-.chip.big{align-self:center;white-space:nowrap}
+.chip.big{align-self:stretch;white-space:nowrap;padding:3px 10px;letter-spacing:.08em;min-width:9.6em}
+.chip.done{background:rgba(43,255,176,.14);border-color:var(--go);color:var(--go)}
+.pop .linkbox{display:block;width:100%;margin:4px 0 6px;border:1px solid var(--edge);background:rgba(2,8,16,.8);color:var(--cy);padding:8px 10px;font-size:13px}
 #my-name.need{box-shadow:0 0 0 1px var(--or);}
 @media (max-width:960px){.friends{order:-1;position:static}}
 
@@ -212,22 +236,23 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
     <select id="bg-pick"><option value="tron">Tron</option><option value="mall">Mall Arcade</option><option value="lorenzos">Lorenzo's</option></select></label>
   <div class="me">
     <div class="field"><label for="my-name">Your name</label><input id="my-name" maxlength="12" spellcheck="false"></div>
-    <button class="chip big" id="link" title="Copy a link that adds you as a friend">Invite</button>
+    <button class="chip big" id="link" title="Send this link to a friend. When they open it, you're on each other's Players lists.">Copy invite link</button>
   </div>
 </header>
 
 <main class="wrap">
   <section aria-label="Games">
+    <p class="lead" id="lead"><span>Choose a game from the list below, then press <b>Play</b>.</span><a href="#shelf" id="lead-all">All games ↓</a></p>
     <div class="stage frame" id="stage">
       <div class="screen"><img id="shot" alt=""><div class="scan"></div><div class="dots" id="dots"></div></div>
       <div class="info">
-        <p class="kicker">Now playing</p>
+        <p class="kicker">Selected game</p>
         <h2 id="g-name"></h2>
         <p id="g-about"></p>
         <ul class="facts" id="g-facts"></ul>
         <div class="acts">
           <button class="btn play" id="g-play">Play</button>
-          <button class="btn ghost" id="g-host">Host a game for friends</button>
+          <button class="btn ghost" id="g-host">Play with friends</button>
         </div>
       </div>
     </div>
@@ -235,11 +260,11 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
   </section>
 
   <aside class="friends frame" aria-label="Friends">
-    <h3>Friends <span class="count" id="count"></span></h3>
+    <h3>Players <span class="count" id="count"></span></h3>
     <ul class="list" id="list"></ul>
-    <h3 class="sub">Everyone online <span class="count" id="ev-count"></span></h3>
-    <ul class="list" id="everyone"></ul>
-    <p class="hint" id="add-msg">Click anyone to invite them or join their game. People you play with become friends, so you'll see them here next time too.</p>
+    <div id="off-wrap" hidden><h3 class="sub">Offline</h3><ul class="list" id="offline"></ul>
+      <button class="more" id="more" hidden></button></div>
+    <p class="hint" id="add-msg">Click anyone online to play with them. Everyone who's been in the Arcade stays on this list.</p>
     <label class="toggle"><input type="checkbox" id="visible"> Show me as online</label>
     <p class="status" id="status"></p>
   </aside>
@@ -259,7 +284,9 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
    One friend code across the Arcade page and every game. While a page is open it registers with the free
    PeerJS service as arcade-<friend code>, tells friends what it's doing every 6 seconds, and passes on invites.
-   - Friends are mutual: when you add someone's code, you appear on their list too (unless they removed you).
+   - One Players list (arc.friends): everyone you've ever seen online stays on it, shown online or offline.
+     Players swap their lists now and then, so you also hear about people who came by while you were away.
+     It's mutual: when someone knows you, you appear on their list too (unless they removed you).
    - Only one tab per player can be online. The tab you're looking at takes over, unless the other tab is
      in an online game right now.
    - Moving from the Arcade into a game (and back) hands who you are over in the link (#arc=...). */
@@ -274,11 +301,13 @@ const arcSv=(k,v)=>{try{localStorage.setItem('arcade.'+k,JSON.stringify(v));}cat
   try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);if(o.r)arcSv('removed',o.r);}catch(e){}
   try{history.replaceState(null,'',location.href.split('#')[0]);}catch(e){}})();
 const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),removed:arcLd('removed',[]),
-  seen:{},ws:null,ready:false,hb:0,tries:0,blocked:false,refused:false,tab:arcRand(10),
+  seen:{},ws:null,ready:false,hb:0,tries:0,blocked:false,refused:false,tab:arcRand(10),connSince:0,openAt:0,
   me:()=>({status:'arcade'}),   // the page replaces this: {status, game, gameName, join}
   busy:()=>false,               // a game returns true while it is in an online game, so another tab can't take over
   onChange:()=>{},onInvite:null,onSignal:null,onFriendAdded:null};
 arcSv('tag',arc.tag);
+for(const f of arc.friends)if(!f.t)f.t=Date.now();   // when you last saw them (lists from before this had no dates)
+arc.knAt={};
 const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
 function arcHandoff(){   // what to add to a link so the next page knows who you are
   return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible,r:arc.removed}));}
@@ -290,13 +319,13 @@ if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
 function arcStart(){
   if(arc.ws||!arc.visible)return;
   if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
-  arc.blocked=false;
+  arc.blocked=false;if(!arc.connSince)arc.connSince=Date.now();
   if(arcBC)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.src===ARC_LOBBY){arcFromDesk(m);return;}
-    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.refused=false;clearInterval(arc.hb);arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arcHello();arc.onChange();}
+    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.connSince=0;arc.openAt=Date.now();arc.refused=false;clearInterval(arc.hb);arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
       if(!arc.refused&&++arc.tries<10)setTimeout(arcStart,1200);else{arc.blocked=true;arc.tries=0;arc.onChange();}}
     else if(m.type==='EXPIRE'){const c=arcCode(m.src);if(arc.seen[c])arc.seen[c].open=false;arc.onChange();if(arc.onSignal)arc.onSignal(m);}
@@ -304,12 +333,16 @@ function arcStart(){
   ws.onclose=()=>{if(arc.ws===ws)arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible&&!arc.blocked)setTimeout(arcStart,3000);};
   ws.onerror=()=>{};
 }
-function arcStop(){arcDeskStop();arc.everyone={};const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
+function arcStop(){arcDeskStop();arc.everyone={};arc.listAt=0;arc.connSince=0;const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
 function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}catch(e){}}
 function arcIsFriend(code){return arc.friends.some(f=>f.code===code);}
-function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,fr:1,name:arc.name});
+function arcPing(){const now=Date.now(),kn=arc.friends.map(f=>[f.code,f.name,f.t||0]);
+  const near=arc.friends.filter(f=>now-(f.t||0)<14*864e5||(arc.seen[f.code]&&arc.seen[f.code].open)||arc.everyone[f.code])   // recent players only, so it stays light
+    .sort((a,b)=>(b.t||0)-(a.t||0)).slice(0,40);
+  for(const f of near){const on=(arc.seen[f.code]&&arc.seen[f.code].open)||arc.everyone[f.code],swap=on&&now-(arc.knAt[f.code]||0)>60000;   // swap lists about once a minute
+    if(swap)arc.knAt[f.code]=now;arcSend('OFFER',f.code,swap?{ping:1,fr:1,name:arc.name,kn}:{ping:1,fr:1,name:arc.name});}
   for(const c in arc.seen)if(Date.now()-arc.seen[c].t>16000)arc.seen[c].open=false;arc.onChange();}
-setInterval(()=>{if(arc.ready){arcPing();arcHello();}if(Date.now()-arc.listAt>16000&&Object.keys(arc.everyone).length){arc.everyone={};arc.onChange();}},6000);
+setInterval(()=>{if(arc.ready){arcPing();arcHello();}else if(arc.connSince)arc.onChange();if(Date.now()-arc.listAt>16000&&Object.keys(arc.everyone).length){arc.everyone={};arc.onChange();}},6000);
 /* Everyone online: one open page at a time is also the "lobby desk" (PeerJS id ARC_LOBBY). Every page says hello to
    the desk every 6 seconds and gets back the list of everyone online. If there's no desk, the first page to notice becomes it. */
 const ARC_LOBBY='arcade-lobby-nm2';
@@ -318,7 +351,16 @@ function arcHello(){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type:'O
 function arcFromDesk(m){const p=m.payload||{};
   if(m.type==='EXPIRE'){arcBeDesk();return;}
   if(p.lobby==='list'&&Array.isArray(p.list)){const old=arc.everyone;arc.everyone={};arc.listAt=Date.now();
-    for(const e of p.list)if(e&&e.code&&e.code!==arc.tag)arc.everyone[e.code]=Object.assign({},e,{invited:old[e.code]&&old[e.code].invited});arc.onChange();}}
+    for(const e of p.list)if(e&&e.code&&e.code!==arc.tag){arc.everyone[e.code]=Object.assign({},e,{invited:old[e.code]&&old[e.code].invited});arcKnow(e.code,e.name);}arc.onChange();}}
+function arcKnow(code,name,t){   // remember a player; true if they're new to your list
+  if(!/^[A-Z0-9]{6}$/.test(code||'')||code===arc.tag||arc.removed.includes(code))return false;
+  const now=Date.now();let f=arc.friends.find(x=>x.code===code);name=(name||'').slice(0,12);
+  if(!f){arc.friends.push({code,name,t:t||now});
+    if(arc.friends.length>120){arc.friends.sort((a,b)=>(b.t||0)-(a.t||0));arc.friends.length=120;}
+    arcSv('friends',arc.friends);return true;}
+  let ch=false;if(name&&name!=='PLAYER'&&f.name!==name&&!t){f.name=name;ch=true;}
+  if(t?t>(f.t||0):now-(f.t||0)>300000){f.t=t||now;ch=true;}
+  if(ch)arcSv('friends',arc.friends);return false;}
 function arcBeDesk(){if(arc.desk||!arc.visible||!arc.ready)return;
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+ARC_LOBBY+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   const d={ws,who:{},hb:0};arc.desk=d;
@@ -347,8 +389,10 @@ window.addEventListener('storage',e=>{   // another tab changed the friend list 
   else if(e.key==='arcade.name'){arc.name=arcLd('name','PLAYER');arc.onChange();}});
 function arcSignal(m){const p=m.payload||{},from=arcCode(m.src);
   if((p.ping||p.pong)&&arc.removed.includes(from))return true;   // someone you removed
-  if((p.ping||p.pong)&&p.fr&&!arcIsFriend(from)){   // they added you: add them back
-    arc.friends.push({code:from,name:p.name||''});arcSv('friends',arc.friends);if(arc.onFriendAdded)arc.onFriendAdded(p.name||from,from);}
+  if(p.ping||p.pong)arcKnow(from,p.name);   // they know you: they're on your list too
+  if(Array.isArray(p.kn)){let added=false;   // their Players list: add anyone you haven't met yet
+    for(const x of p.kn.slice(0,150))if(Array.isArray(x))added=arcKnow(String(x[0]||''),String(x[1]||''),Math.min(Date.now(),+x[2]||1))||added;
+    if(added)arc.onChange();}
   if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,fr:1,name:arc.name},arc.me()));
     if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,fr:1,name:arc.name});return true;}
   if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now(),invited:arc.seen[from]&&arc.seen[from].invited});
@@ -363,17 +407,30 @@ function arcAddFriend(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'
   arc.friends.push({code,name:''});arcSv('friends',arc.friends);arcPing();return '';}
 function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];
   if(!arc.removed.includes(code))arc.removed.push(code);arcSv('removed',arc.removed);arcSv('friends',arc.friends);arc.onChange();}
-function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arc.onChange();}
+function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arcHello();arc.onChange();}
 function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on){arc.blocked=false;arcStart();}else arcStop();arc.onChange();}
-const ARC_ORDER={hosting:0,arcade:1,idle:1,solo:1,playing:2,full:2,offline:3};
-function arcFriendList(){return arc.friends.map(f=>{const s=arc.seen[f.code];return Object.assign({code:f.code,name:(s&&s.name)||f.name||f.code},
-  s&&s.open?s:{status:'offline'});}).sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||a.name.localeCompare(b.name));}
+const ARC_ORDER={hosting:0,idle:0,arcade:1,solo:1,playing:2,full:2,offline:3};
+function arcFriendList(){   // everyone on your Players list: online first (joinable ones at the top), then offline, most recently seen first
+  return arc.friends.map(f=>{const s=arc.seen[f.code],live=s&&s.open?s:arc.everyone[f.code]||null;   // what they told us, else what the lobby desk says
+    return Object.assign({},live||{status:'offline'},{code:f.code,name:(live&&live.name&&live.name!=='PLAYER'?live.name:f.name)||(live&&live.name)||'PLAYER',t:f.t||0});})
+  .sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||(a.status==='offline'?b.t-a.t:a.name.localeCompare(b.name)));}
 function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what a friend is doing, the same everywhere
-  switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'Online in '+gn;case 'solo':return 'Playing '+gn+' alone';
+  switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'In '+gn+', join them!';case 'solo':return 'Playing '+gn+' alone';
     case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';default:return 'Offline';}}
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
 function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
-  arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
+  arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':'';}
+function arcConnNote(){   // what to show in place of the players list while it isn't in yet; '' once it is
+  if(!arc.visible||arc.blocked||arc.refused)return '';
+  if(!arc.ready)return arc.connSince&&Date.now()-arc.connSince>10000?'Still connecting. Check your internet, or refresh the page.':'Connecting…';
+  if(!arc.listAt&&Date.now()-arc.openAt<5000)return 'Looking for players…';   // never say "nobody's here" before the list has arrived
+  return '';}
+function arcInviteLink(){   // opening this link makes you friends with whoever opens it
+  const a=arcArcadeUrl().split('#')[0].split('?')[0];return (/^https?:/.test(a)?a:ARC_HOME+'Arcade.html')+'?add='+arc.tag;}
+async function arcCopyInvite(){   // share sheet on phones, else the clipboard. Returns 'shared', 'copied', 'cancel' or the link to show
+  const url=arcInviteLink();
+  try{if(navigator.share&&matchMedia('(pointer:coarse)').matches){await navigator.share({title:'Play with me in the Arcade',url});return 'shared';}}catch(e){if(e&&e.name==='AbortError')return 'cancel';}
+  try{await navigator.clipboard.writeText(url);return 'copied';}catch(e){return url;}}
 function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
   const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
   if(/\/Arcade\.html$/i.test(here))return here;try{return new URL('../Arcade.html',here).href;}catch(e){return '';}}   // a preview has no folder: no Arcade
@@ -413,6 +470,7 @@ function restartShots(){clearInterval(shotT);if(matchMedia('(prefers-reduced-mot
 $('g-play').onclick=()=>go(cur);
 $('g-host').onclick=()=>go(cur,{host:1});
 
+$('lead-all').onclick=e=>{e.preventDefault();$('shelf').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});};
 // ---- shelf ----
 function shelf(){const el=$('shelf');el.innerHTML='';
   if(GAMES.length<2){el.innerHTML='<h3>More games</h3><p class="empty">New games you make with Claude will show up here, ready to play.</p>';return;}
@@ -428,8 +486,8 @@ function tint(code){let h=0;for(const ch of code)h=(h*31+ch.charCodeAt(0))>>>0;r
 function describe(f){
   const g=byId(f.game),text=arcDescribe(Object.assign({},f,{gameName:f.gameName||(g&&g.name)}));
   switch(f.status){
-    case 'arcade':case 'idle':case 'solo':return {text,dot:'var(--go)',act:'invite'};
-    case 'hosting':return {text,dot:'var(--host)',act:'join'};
+    case 'arcade':case 'solo':return {text,dot:'var(--go)',act:'invite'};
+    case 'idle':case 'hosting':return {text,dot:'var(--or)',act:'join'};   // on a game's menu or hosting: click to join them
     case 'full':case 'playing':return {text,dot:'var(--busy)'};
     default:return {text,dot:'var(--off)',off:true};}
 }
@@ -443,19 +501,21 @@ function personRow(f,isFriend){const d=describe(f),li=document.createElement('li
     else if(d.act==='invite'&&GAMES.some(g=>g.online)){const b=document.createElement('button');b.className='mini';b.textContent=f.invited?'Invited':'Invite';b.onclick=e=>friendMenu(e.currentTarget,f,true);side.appendChild(b);}
     return li;}
 function render(){
-  const fl=arcFriendList(),online=fl.filter(f=>f.status!=='offline').length,list=$('list');
-  $('count').textContent=fl.length?online+' of '+fl.length+' online':'';
+  const fl=arcFriendList().concat(arcEveryoneList()),on=fl.filter(f=>f.status!=='offline'),off=fl.filter(f=>f.status==='offline'),list=$('list');
+  $('count').textContent=fl.length?on.length+' of '+fl.length+' online':'';
   list.innerHTML='';
-  if(!fl.length){const li=document.createElement('li');li.className='hint';li.style.padding='6px 0 2px';li.textContent='No friends yet. Click anyone under Everyone online to play. People you play with become friends.';list.appendChild(li);}
-  for(const f of fl)list.appendChild(personRow(f,true));
-  const ev=arcEveryoneList(),el=$('everyone');el.innerHTML='';$('ev-count').textContent=ev.length?ev.length+' here':'';
-  if(!ev.length){const li=document.createElement('li');li.className='hint';li.style.padding='6px 0 2px';li.textContent=arc.ready?'Nobody else is online right now. Anyone who opens the Arcade shows up here.':'Connecting…';el.appendChild(li);}
-  for(const f of ev)el.appendChild(personRow(f,false));
+  if(!on.length){const li=document.createElement('li');li.className='hint';li.style.padding='6px 0 2px';
+    li.textContent=arcConnNote()||(fl.length?'Nobody else is online right now. They show up here as soon as they open the Arcade or a game.':'Nobody else is here yet. Anyone who opens the Arcade shows up here, and stays on your list.');list.appendChild(li);}
+  for(const f of on)list.appendChild(personRow(f,true));
+  const ol=$('offline');ol.innerHTML='';$('off-wrap').hidden=!off.length;
+  const show=showAllOff?off:off.slice(0,8);for(const f of show)ol.appendChild(personRow(f,true));
+  $('more').hidden=off.length<=8;$('more').textContent=showAllOff?'Show fewer':'Show all '+off.length+' offline';
   $('visible').checked=arc.visible;
   $('status').textContent=arcStatusLine();
   $('my-name').classList.toggle('need',arc.name==='PLAYER');
 }
-function confirmRemove(f){return window.confirm?confirm('Remove '+f.name+' from your friends?'):true;}
+let showAllOff=false;$('more').onclick=()=>{showAllOff=!showAllOff;render();};
+function confirmRemove(f){return window.confirm?confirm('Remove '+f.name+' from your Players list?'):true;}
 let pop=null;
 function closePop(){if(pop){pop.remove();pop=null;}}
 // clicking a friend: join what they're hosting, invite them to any online game, or remove them
@@ -468,12 +528,12 @@ function friendMenu(btn,f,inviteOnly){closePop();const games=GAMES.filter(g=>g.o
   if(!items.length){const n=document.createElement('p');n.className='pop-n';
     n.textContent=d.off?"They're offline. As soon as they open the Arcade or a game, you can invite them from here.":"They're in a game right now. Invite them when it's over.";pop.appendChild(n);}
   for(const [label,fn,cls] of items){const b=document.createElement('button');b.setAttribute('role','menuitem');b.textContent=label;if(cls)b.className=cls;b.onclick=()=>{closePop();fn();};pop.appendChild(b);}
-  if(!inviteOnly&&arcIsFriend(f.code)){const x=document.createElement('button');x.setAttribute('role','menuitem');x.className='rm';x.textContent='Remove friend';x.onclick=()=>{closePop();if(confirmRemove(f))arcRemoveFriend(f.code);};pop.appendChild(x);}
-  else if(!inviteOnly){const x=document.createElement('button');x.setAttribute('role','menuitem');x.className='rm';x.textContent='Add as a friend';x.onclick=()=>{closePop();arcAddFriend(f.code);render();};pop.appendChild(x);}
+  if(!inviteOnly&&arcIsFriend(f.code)){const x=document.createElement('button');x.setAttribute('role','menuitem');x.className='rm';x.textContent='Remove from my list';x.onclick=()=>{closePop();if(confirmRemove(f))arcRemoveFriend(f.code);};pop.appendChild(x);}
+  else if(!inviteOnly){const x=document.createElement('button');x.setAttribute('role','menuitem');x.className='rm';x.textContent='Add to my list';x.onclick=()=>{closePop();arcAddFriend(f.code);render();};pop.appendChild(x);}
   document.body.appendChild(pop);const r=btn.getBoundingClientRect();
   pop.style.top=Math.min(r.bottom+6,innerHeight-pop.offsetHeight-8)+'px';pop.style.left=Math.max(8,Math.min(r.left,innerWidth-pop.offsetWidth-8))+'px';
   const first=pop.querySelector('button');if(first)first.focus();}
-document.addEventListener('click',e=>{if(pop&&!pop.contains(e.target)&&!e.target.closest('.pick,.mini'))closePop();});
+document.addEventListener('click',e=>{if(pop&&!pop.contains(e.target)&&!e.target.closest('.pick,.mini,#link'))closePop();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePop();});
 addEventListener('scroll',closePop,{passive:true});
 
@@ -489,14 +549,18 @@ $('toast-no').onclick=()=>{$('toast').hidden=true;invited=null;};
 $('my-name').value=arc.name==='PLAYER'?'':arc.name;$('my-name').placeholder='PLAYER';
 $('my-name').addEventListener('change',e=>arcSetName(e.target.value));
 $('my-name').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
-function inviteLink(){const here=location.href.split('#')[0].split('?')[0];return (/^https?:/.test(here)?here:ARC_HOME+'Arcade.html')+'?add='+arc.tag;}
-$('link').onclick=async()=>{const url=inviteLink(),m=$('add-msg');m.classList.remove('err');
-  try{if(navigator.share&&matchMedia('(pointer:coarse)').matches){await navigator.share({title:'Play with me in the Arcade',url});return;}}catch(e){if(e&&e.name==='AbortError')return;}
-  try{await navigator.clipboard.writeText(url);m.textContent='Invite link copied. Send it to a friend: when they open it, you\'re on each other\'s friends lists.';}
-  catch(e){m.textContent='Send this link to a friend: '+url;}};
+let linkT=0;
+$('link').onclick=async e=>{const btn=e.currentTarget,m=$('add-msg');m.classList.remove('err');closePop();
+  const r=await arcCopyInvite();if(r==='cancel')return;
+  if(r==='copied'||r==='shared'){btn.textContent=r==='copied'?'Link copied ✓':'Link shared ✓';btn.classList.add('done');clearTimeout(linkT);
+    linkT=setTimeout(()=>{btn.textContent='Copy invite link';btn.classList.remove('done');},3000);
+    m.textContent='Invite link '+(r==='copied'?'copied':'shared')+'. Send it to a friend: when they open it, you\'re on each other\'s Players lists.';return;}
+  pop=document.createElement('div');pop.className='pop';pop.innerHTML='<p class="pop-n">Copy this link and send it to a friend. When they open it, you\'re on each other\'s Players lists.</p><input class="linkbox" readonly>';
+  const box=pop.querySelector('input');box.value=r;document.body.appendChild(pop);const b=btn.getBoundingClientRect();
+  pop.style.top=(b.bottom+6)+'px';pop.style.left=Math.max(8,Math.min(b.right-pop.offsetWidth,innerWidth-pop.offsetWidth-8))+'px';box.focus();box.select();};
 arc.onFriendAdded=name=>{const m=$('add-msg');m.classList.remove('err');m.textContent=name+' added you, so they are now on your friends list too.';};
 {const add=ARC_QS.get('add');if(add){const err=arcAddFriend(add),m=$('add-msg');
-  if(!err||err==='Already on your list.'){m.textContent="You're now friends with "+add.toUpperCase()+'. Type your name above so they know who you are.';}else{m.classList.add('err');m.textContent=err;}
+  if(!err||err==='Already on your list.'){m.textContent="You're on each other's Players lists now. Type your name above so they know who you are.";}else{m.classList.add('err');m.textContent=err;}
   try{const q=new URLSearchParams(location.search);q.delete('add');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}catch(e){}}}
 $('visible').onchange=e=>arcSetVisible(e.target.checked);
 arc.me=()=>({status:'arcade'});arc.onChange=render;

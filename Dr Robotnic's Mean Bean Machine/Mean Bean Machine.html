@@ -338,7 +338,8 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 .netfriends .nf i{border-color:transparent!important;box-shadow:0 0 8px currentColor}
 #net-input,.netbody input{background:rgba(2,8,16,.8)!important;border:1px solid var(--a-edge)!important;color:var(--a-cy)!important;border-radius:0!important;letter-spacing:.16em}
 .mycode{color:var(--a-cy)}
-.codeline{font-size:11.5px!important;color:var(--a-muted)}.codeline .mycode{font-size:12px!important;letter-spacing:.12em}
+.netinv{display:flex;align-items:center;gap:10px;margin:8px 0 10px}.netinv[hidden]{display:none}.netinv .nbtn{white-space:nowrap}
+.netinv .st{font-size:11.5px;color:var(--a-muted);line-height:1.35;user-select:text;overflow-wrap:anywhere}
 .seats li{color:var(--a-ink)}
 </style>
 <!-- ===== end of ARCADE GAME SKIN (style part) ===== -->
@@ -413,16 +414,12 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
             <p id="net-msg"></p>
             <div class="netbtns" id="net-go-wrap" hidden><button class="nbtn" id="net-go">Join</button></div>
             <div class="netbtns" id="net-upd" hidden><button class="nbtn" id="net-save">Save the new version…</button></div>
-            <div id="net-seats-wrap" hidden><h4>Players</h4><ul class="seats" id="net-seats"></ul>
+            <div id="net-seats-wrap" hidden><h4>In your game</h4><ul class="seats" id="net-seats"></ul>
               <div class="netrow"><button class="nbtn" id="net-start">Start game</button></div></div>
             <div id="net-lobby">
-              <p class="codeline">Your friend code: <span class="mycode" id="net-mycode"></span></p>
-              <h4>Players: click a name to play</h4>
+              <h4 id="net-ph">Players: click a name to play</h4>
               <ul class="netfriends" id="net-friends"></ul>
-              <form id="net-join" autocomplete="off">
-                <input id="net-input" maxlength="6" placeholder="FRIEND CODE" spellcheck="false" aria-label="Friend code to join">
-                <button type="submit" class="nbtn">Join</button>
-              </form>
+              <div class="netinv" id="net-inv"><button type="button" class="nbtn" id="net-invlink">Copy invite link</button><span class="st" id="net-invmsg">Send it to a friend. When they open it, you're on each other's Players lists.</span></div>
             </div>
             <div class="netrow"><button class="nbtn" id="net-host">Host a game</button><button class="nbtn" id="net-close">Close</button></div>
           </div>
@@ -503,7 +500,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <p>Options › Difficulty: Easy plays with four colours instead of five and gives you slower, clumsier opponents; Hard makes them quicker and sharper. The game always starts on Medium with captions off. Turn on Options › Captions &amp; descriptions to see what each opponent says before the match.</p>
 
       <h3>Playing online</h3>
-      <p>Choose Game › Play Online… (or press <kbd>O</kbd>). Click a friend, or anyone in Everyone online, to invite them or join their game. The host plays the left-hand well and the friend the right; the host's computer runs the game, so it plays the same for both of you.</p>
+      <p>Choose Game › Play Online… (or press <kbd>O</kbd>), or click a name in the Arcade. Everyone who's been in the Arcade is on your Players list. Anyone sitting on a game's menu can be joined with one click: their game opens for you, no codes and no hosting first. Click someone to join them, or invite them to yours. The host plays the left-hand well and the friend the right; the host's computer runs the game, so it plays the same for both of you.</p>
       <p>Dr. Robotnik's Mean Bean Machine was made by Compile and Sega in 1993. The pictures here are the game's own sprites; the rules, timings and every opponent's lines were worked out from a full playthrough video.</p>
     </div>
   </section>
@@ -514,14 +511,16 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=8;   // goes up by one with every update
+const GAME_BUILD=10;   // goes up by one with every update
 const GAME_ID='meanbean',GAME_NAME="Dr. Robotnik's Mean Bean Machine";
 const SNAP_SMOOTH={O:[4],P:[1]};   // online guests: attack orbs and pop bursts glide between snapshots (the falling pair glides by itself)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into the Arcade page and every game; every copy must stay identical.
    One friend code across the Arcade page and every game. While a page is open it registers with the free
    PeerJS service as arcade-<friend code>, tells friends what it's doing every 6 seconds, and passes on invites.
-   - Friends are mutual: when you add someone's code, you appear on their list too (unless they removed you).
+   - One Players list (arc.friends): everyone you've ever seen online stays on it, shown online or offline.
+     Players swap their lists now and then, so you also hear about people who came by while you were away.
+     It's mutual: when someone knows you, you appear on their list too (unless they removed you).
    - Only one tab per player can be online. The tab you're looking at takes over, unless the other tab is
      in an online game right now.
    - Moving from the Arcade into a game (and back) hands who you are over in the link (#arc=...). */
@@ -536,11 +535,13 @@ const arcSv=(k,v)=>{try{localStorage.setItem('arcade.'+k,JSON.stringify(v));}cat
   try{const o=JSON.parse(decodeURIComponent(m[1]));if(o.t)arcSv('tag',o.t);if(o.n)arcSv('name',o.n);if(o.f)arcSv('friends',o.f);if(o.v!=null)arcSv('visible',o.v);if(o.r)arcSv('removed',o.r);}catch(e){}
   try{history.replaceState(null,'',location.href.split('#')[0]);}catch(e){}})();
 const arc={tag:arcLd('tag',null)||arcRand(6),name:arcLd('name','PLAYER'),visible:arcLd('visible',true),friends:arcLd('friends',[]),removed:arcLd('removed',[]),
-  seen:{},ws:null,ready:false,hb:0,tries:0,blocked:false,refused:false,tab:arcRand(10),
+  seen:{},ws:null,ready:false,hb:0,tries:0,blocked:false,refused:false,tab:arcRand(10),connSince:0,openAt:0,
   me:()=>({status:'arcade'}),   // the page replaces this: {status, game, gameName, join}
   busy:()=>false,               // a game returns true while it is in an online game, so another tab can't take over
   onChange:()=>{},onInvite:null,onSignal:null,onFriendAdded:null};
 arcSv('tag',arc.tag);
+for(const f of arc.friends)if(!f.t)f.t=Date.now();   // when you last saw them (lists from before this had no dates)
+arc.knAt={};
 const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
 function arcHandoff(){   // what to add to a link so the next page knows who you are
   return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible,r:arc.removed}));}
@@ -552,13 +553,13 @@ if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
 function arcStart(){
   if(arc.ws||!arc.visible)return;
   if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
-  arc.blocked=false;
+  arc.blocked=false;if(!arc.connSince)arc.connSince=Date.now();
   if(arcBC)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(m.src===ARC_LOBBY){arcFromDesk(m);return;}
-    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.refused=false;clearInterval(arc.hb);arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arcHello();arc.onChange();}
+    if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.connSince=0;arc.openAt=Date.now();arc.refused=false;clearInterval(arc.hb);arc.hb=setInterval(()=>{try{ws.send('{"type":"HEARTBEAT"}');}catch(e){}},5000);arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
       if(!arc.refused&&++arc.tries<10)setTimeout(arcStart,1200);else{arc.blocked=true;arc.tries=0;arc.onChange();}}
     else if(m.type==='EXPIRE'){const c=arcCode(m.src);if(arc.seen[c])arc.seen[c].open=false;arc.onChange();if(arc.onSignal)arc.onSignal(m);}
@@ -566,12 +567,16 @@ function arcStart(){
   ws.onclose=()=>{if(arc.ws===ws)arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible&&!arc.blocked)setTimeout(arcStart,3000);};
   ws.onerror=()=>{};
 }
-function arcStop(){arcDeskStop();arc.everyone={};const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
+function arcStop(){arcDeskStop();arc.everyone={};arc.listAt=0;arc.connSince=0;const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
 function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}catch(e){}}
 function arcIsFriend(code){return arc.friends.some(f=>f.code===code);}
-function arcPing(){for(const f of arc.friends)arcSend('OFFER',f.code,{ping:1,fr:1,name:arc.name});
+function arcPing(){const now=Date.now(),kn=arc.friends.map(f=>[f.code,f.name,f.t||0]);
+  const near=arc.friends.filter(f=>now-(f.t||0)<14*864e5||(arc.seen[f.code]&&arc.seen[f.code].open)||arc.everyone[f.code])   // recent players only, so it stays light
+    .sort((a,b)=>(b.t||0)-(a.t||0)).slice(0,40);
+  for(const f of near){const on=(arc.seen[f.code]&&arc.seen[f.code].open)||arc.everyone[f.code],swap=on&&now-(arc.knAt[f.code]||0)>60000;   // swap lists about once a minute
+    if(swap)arc.knAt[f.code]=now;arcSend('OFFER',f.code,swap?{ping:1,fr:1,name:arc.name,kn}:{ping:1,fr:1,name:arc.name});}
   for(const c in arc.seen)if(Date.now()-arc.seen[c].t>16000)arc.seen[c].open=false;arc.onChange();}
-setInterval(()=>{if(arc.ready){arcPing();arcHello();}if(Date.now()-arc.listAt>16000&&Object.keys(arc.everyone).length){arc.everyone={};arc.onChange();}},6000);
+setInterval(()=>{if(arc.ready){arcPing();arcHello();}else if(arc.connSince)arc.onChange();if(Date.now()-arc.listAt>16000&&Object.keys(arc.everyone).length){arc.everyone={};arc.onChange();}},6000);
 /* Everyone online: one open page at a time is also the "lobby desk" (PeerJS id ARC_LOBBY). Every page says hello to
    the desk every 6 seconds and gets back the list of everyone online. If there's no desk, the first page to notice becomes it. */
 const ARC_LOBBY='arcade-lobby-nm2';
@@ -580,7 +585,16 @@ function arcHello(){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type:'O
 function arcFromDesk(m){const p=m.payload||{};
   if(m.type==='EXPIRE'){arcBeDesk();return;}
   if(p.lobby==='list'&&Array.isArray(p.list)){const old=arc.everyone;arc.everyone={};arc.listAt=Date.now();
-    for(const e of p.list)if(e&&e.code&&e.code!==arc.tag)arc.everyone[e.code]=Object.assign({},e,{invited:old[e.code]&&old[e.code].invited});arc.onChange();}}
+    for(const e of p.list)if(e&&e.code&&e.code!==arc.tag){arc.everyone[e.code]=Object.assign({},e,{invited:old[e.code]&&old[e.code].invited});arcKnow(e.code,e.name);}arc.onChange();}}
+function arcKnow(code,name,t){   // remember a player; true if they're new to your list
+  if(!/^[A-Z0-9]{6}$/.test(code||'')||code===arc.tag||arc.removed.includes(code))return false;
+  const now=Date.now();let f=arc.friends.find(x=>x.code===code);name=(name||'').slice(0,12);
+  if(!f){arc.friends.push({code,name,t:t||now});
+    if(arc.friends.length>120){arc.friends.sort((a,b)=>(b.t||0)-(a.t||0));arc.friends.length=120;}
+    arcSv('friends',arc.friends);return true;}
+  let ch=false;if(name&&name!=='PLAYER'&&f.name!==name&&!t){f.name=name;ch=true;}
+  if(t?t>(f.t||0):now-(f.t||0)>300000){f.t=t||now;ch=true;}
+  if(ch)arcSv('friends',arc.friends);return false;}
 function arcBeDesk(){if(arc.desk||!arc.visible||!arc.ready)return;
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+ARC_LOBBY+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   const d={ws,who:{},hb:0};arc.desk=d;
@@ -609,8 +623,10 @@ window.addEventListener('storage',e=>{   // another tab changed the friend list 
   else if(e.key==='arcade.name'){arc.name=arcLd('name','PLAYER');arc.onChange();}});
 function arcSignal(m){const p=m.payload||{},from=arcCode(m.src);
   if((p.ping||p.pong)&&arc.removed.includes(from))return true;   // someone you removed
-  if((p.ping||p.pong)&&p.fr&&!arcIsFriend(from)){   // they added you: add them back
-    arc.friends.push({code:from,name:p.name||''});arcSv('friends',arc.friends);if(arc.onFriendAdded)arc.onFriendAdded(p.name||from,from);}
+  if(p.ping||p.pong)arcKnow(from,p.name);   // they know you: they're on your list too
+  if(Array.isArray(p.kn)){let added=false;   // their Players list: add anyone you haven't met yet
+    for(const x of p.kn.slice(0,150))if(Array.isArray(x))added=arcKnow(String(x[0]||''),String(x[1]||''),Math.min(Date.now(),+x[2]||1))||added;
+    if(added)arc.onChange();}
   if(p.ping){arcSend('ANSWER',from,Object.assign({pong:1,fr:1,name:arc.name},arc.me()));
     if(!arc.seen[from]||!arc.seen[from].open)arcSend('OFFER',from,{ping:1,fr:1,name:arc.name});return true;}
   if(p.pong){arc.seen[from]=Object.assign({},p,{open:true,t:Date.now(),invited:arc.seen[from]&&arc.seen[from].invited});
@@ -625,17 +641,30 @@ function arcAddFriend(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'
   arc.friends.push({code,name:''});arcSv('friends',arc.friends);arcPing();return '';}
 function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);delete arc.seen[code];
   if(!arc.removed.includes(code))arc.removed.push(code);arcSv('removed',arc.removed);arcSv('friends',arc.friends);arc.onChange();}
-function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arc.onChange();}
+function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arcHello();arc.onChange();}
 function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on){arc.blocked=false;arcStart();}else arcStop();arc.onChange();}
-const ARC_ORDER={hosting:0,arcade:1,idle:1,solo:1,playing:2,full:2,offline:3};
-function arcFriendList(){return arc.friends.map(f=>{const s=arc.seen[f.code];return Object.assign({code:f.code,name:(s&&s.name)||f.name||f.code},
-  s&&s.open?s:{status:'offline'});}).sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||a.name.localeCompare(b.name));}
+const ARC_ORDER={hosting:0,idle:0,arcade:1,solo:1,playing:2,full:2,offline:3};
+function arcFriendList(){   // everyone on your Players list: online first (joinable ones at the top), then offline, most recently seen first
+  return arc.friends.map(f=>{const s=arc.seen[f.code],live=s&&s.open?s:arc.everyone[f.code]||null;   // what they told us, else what the lobby desk says
+    return Object.assign({},live||{status:'offline'},{code:f.code,name:(live&&live.name&&live.name!=='PLAYER'?live.name:f.name)||(live&&live.name)||'PLAYER',t:f.t||0});})
+  .sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||(a.status==='offline'?b.t-a.t:a.name.localeCompare(b.name)));}
 function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what a friend is doing, the same everywhere
-  switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'Online in '+gn;case 'solo':return 'Playing '+gn+' alone';
+  switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'In '+gn+', join them!';case 'solo':return 'Playing '+gn+' alone';
     case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';default:return 'Offline';}}
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
 function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
-  arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':arc.ready?'':'Connecting…';}
+  arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':'';}
+function arcConnNote(){   // what to show in place of the players list while it isn't in yet; '' once it is
+  if(!arc.visible||arc.blocked||arc.refused)return '';
+  if(!arc.ready)return arc.connSince&&Date.now()-arc.connSince>10000?'Still connecting. Check your internet, or refresh the page.':'Connecting…';
+  if(!arc.listAt&&Date.now()-arc.openAt<5000)return 'Looking for players…';   // never say "nobody's here" before the list has arrived
+  return '';}
+function arcInviteLink(){   // opening this link makes you friends with whoever opens it
+  const a=arcArcadeUrl().split('#')[0].split('?')[0];return (/^https?:/.test(a)?a:ARC_HOME+'Arcade.html')+'?add='+arc.tag;}
+async function arcCopyInvite(){   // share sheet on phones, else the clipboard. Returns 'shared', 'copied', 'cancel' or the link to show
+  const url=arcInviteLink();
+  try{if(navigator.share&&matchMedia('(pointer:coarse)').matches){await navigator.share({title:'Play with me in the Arcade',url});return 'shared';}}catch(e){if(e&&e.name==='AbortError')return 'cancel';}
+  try{await navigator.clipboard.writeText(url);return 'copied';}catch(e){return url;}}
 function arcArcadeUrl(){   // the Arcade page: passed in the link, else one folder up from a game
   const a=ARC_QS.get('arcade');if(a)return a;const here=location.href.split('#')[0].split('?')[0];
   if(/\/Arcade\.html$/i.test(here))return here;try{return new URL('../Arcade.html',here).href;}catch(e){return '';}}   // a preview has no folder: no Arcade
@@ -1188,31 +1217,34 @@ function applySnap(s){state=s.st;gmode=s.gm;stage=s.sg;paused=!!s.pa;frame=s.fr;
    Less lag for guests: if the game defines SNAP_SMOOTH (which snapshot fields move: {listKey:[field,...]}, a field
    written '~f' is an angle in radians), guests see things glide from one snapshot to the next instead of jumping.
    netPending(action) tells a guest how many of its own presses the host hasn't acted on yet, so the game can draw
-   them straight away. The relay sends every second snapshot, and only the parts that changed. */
+   them straight away. The relay sends every second snapshot, and only the parts that changed.
+   A game that predicts its own player (Bub & Bob 2) counts its frames in net.q; every snapshot's aq[slot] says the
+   newest frame of that guest's the host has acted on, so the guest can replay just the newer ones.
+   Lobbies: anyone on a game's menu can be joined straight away (their lobby opens for you); no one has to host first. */
 const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun2.l.google.com:19302']},
   {urls:'stun:stun.cloudflare.com:3478'},
   {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
 const RELAY_AFTER=6000,RELAY_EVERY=2,RELAY_FULL=30,SNAP_JUMP=96,JOIN_GIVEUP=25000,QUIET_DROP=9000;
-const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,fr:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false};
+const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,fr:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false,q:0};
 const send=(type,code,payload)=>arcSend(type,code,Object.assign({game:GAME_ID},payload));
 function lobbyChanged(){if(typeof onLobbyChange==='function')onLobbyChange();}
 function say(m){net.msg=m;lobbyChanged();}
 arc.me=()=>{if(net.role==='host'){const n=Object.values(net.guests).filter(g=>!g.upd).length+1,live=n>1&&gameStatus()==='playing';
     return {status:n>=MAX_PLAYERS||live?'full':'hosting',game:GAME_ID,gameName:GAME_NAME,join:arc.tag,v:GAME_BUILD};}
   if(net.role==='guest')return {status:'playing',game:GAME_ID,gameName:GAME_NAME,v:GAME_BUILD};
-  return {status:gameStatus(),game:GAME_ID,gameName:GAME_NAME,v:GAME_BUILD};};
+  const st=gameStatus();return {status:st,game:GAME_ID,gameName:GAME_NAME,join:st==='idle'?arc.tag:undefined,v:GAME_BUILD};};   // on the game's menu: anyone can join
 arc.busy=()=>!!net.role;
 arc.onChange=lobbyChanged;
 arc.onInvite=(from,p)=>{if(typeof onInvite==='function')onInvite(from,p.name,p);};
 arc.onSignal=m=>{if(m.type==='EXPIRE'){if(net.role==='guest'&&arcCode(m.src)===net.host&&!(net.ch&&net.ch.readyState==='open')){
-    say(net.host+" isn't online right now. Check that your friend has the game open.");leaveOnline();}return;}
+    const f=arc.friends.find(x=>x.code===net.host)||arc.everyone[net.host];say(((f&&f.name)||'Your friend')+" isn't online right now. Check that they have the game open.");leaveOnline();}return;}
   onSignal(m);};
 function invite(code){if(net.role!=='host')hostGame();arcInvite(code,GAME_ID,GAME_NAME,arc.tag);(arc.seen[code]||{}).invited=true;if(arc.everyone[code])arc.everyone[code].invited=true;
   const f=arc.friends.find(f=>f.code===code)||arc.everyone[code];say('Invite sent to '+((f&&f.name)||code)+'. Waiting for them to join…');}
 // what clicking a friend's name does in this game: {label, go()} or null
 function friendAction(f){
   if(f.status==='offline')return null;
-  if(f.status==='hosting'&&f.join&&!net.role)return f.game===GAME_ID?{label:'Join',go:()=>joinGame(f.join)}:{label:'Join in '+(f.gameName||'their game'),go:()=>arcGoPlay(f.game,{join:f.join})};
+  if((f.status==='hosting'||f.status==='idle')&&f.join&&!net.role)return f.game===GAME_ID?{label:'Join',go:()=>joinGame(f.join)}:{label:'Join in '+(f.gameName||'their game'),go:()=>arcGoPlay(f.game,{join:f.join})};
   if(net.role==='guest'||f.status==='playing'||f.status==='full')return null;
   return {label:f.invited?'Invite again':'Invite',go:()=>invite(f.code)};}
 // --- a link to one other player: a WebRTC data channel, or the relay, which looks the same to the code below ---
@@ -1238,7 +1270,9 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
       else if(net.role==='host'&&net.guests[from])dropPeer(from,net.guests[from].name+' left the game.');return;}
     if(m.type==='OFFER'&&(p.sdp||p.relay)){   // someone wants to join my game
       if(p.game!==GAME_ID){send('ANSWER',from,{refuse:arc.name+' is playing a different game right now. Click their name in the Arcade to join them there.'});return;}
-      if(net.role!=='host'){send('ANSWER',from,{refuse:arc.name+" isn't hosting right now. Ask them to invite you, or click their name to invite them."});return;}
+      if(net.role==='guest'){send('ANSWER',from,{refuse:arc.name+" is in someone else's game right now. Try again when they're back."});return;}
+      if(!net.role){if(gameStatus()!=='idle'){send('ANSWER',from,{refuse:arc.name+" is playing alone right now. You can join as soon as they're back on the menu."});return;}
+        hostGame();}   // they're on the game's menu: open their lobby for you, no need to host first
       if(!p.v){send('ANSWER',from,{refuse:'Your copy of the game is too old. Open the Arcade at '+ARC_HOME+' to get the newest one.'});return;}
       if(p.relay){   // the direct link didn't work out: play through the relay instead
         if(p.v!==GAME_BUILD){send('ANSWER',from,{refuse:'You and '+arc.name+' have different versions of '+GAME_NAME+'. Both of you open it from '+ARC_HOME+' to get the same one.'});return;}
@@ -1275,7 +1309,7 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
 }
 // --- host ---
 function hostGame(){if(net.role)return;net.role='host';net.guests={};net.rc={};
-  say('You are hosting. Click a friend below to invite them, or give them your friend code '+arc.tag+'.');arcPing();}
+  say('You are hosting. Click a name below to invite them, or send a friend your invite link.');arcPing();}
 function wireGuestChannel(code,ch){const g=net.guests[code];if(!g)return;g.ch=ch;const mine=()=>net.guests[code]===g&&g.ch===ch;
   ch.onopen=()=>{if(!mine())return;g.last=Date.now();say(g.name+' joined as player '+(g.slot+1)+'.');lobbyChanged();};
   ch.onclose=()=>{if(mine())dropPeer(code,g.name+' left the game.');};
@@ -1284,13 +1318,13 @@ function lobbyPlayers(){   // host: who is in, by player number
   const out=[{slot:0,name:arc.name+' (you)'}];for(const c in net.guests){const g=net.guests[c];if(g.upd)continue;out.push({slot:g.slot,name:g.name,ready:!!(g.ch&&g.ch.readyState==='open')});}
   return out.sort((a,b)=>a.slot-b.slot);}
 function startOnlineGame(){const n=Math.max(...lobbyPlayers().map(p=>p.slot))+1;startGame(n);}
-function hostInput(slot,m,code){const i=input[slot];if(!i)return;const rc=net.rc[code]=net.rc[code]||{};
+function hostInput(slot,m,code){const i=input[slot];if(!i)return;const gq=net.guests[code];if(gq&&m.q>(gq.aq||0))gq.aq=m.q;const rc=net.rc[code]=net.rc[code]||{};
   for(const a of ACTIONS){i[a]=!!(m.g&&m.g[a]);const n=(m.c&&m.c[a])||0;if(n>(rc[a]||0)){rc[a]=n;i[a+'P']=true;}}}
 function sendSnap(){let obj=null,full=null,parts=null;net.fr++;
   for(const c in net.guests){const g=net.guests[c],ch=g.ch;if(g.upd||!ch||ch.readyState!=='open'||ch.bufferedAmount>65536)continue;
     if(ch.relay&&net.fr%RELAY_EVERY)continue;   // the relay gets every second picture...
-    if(!obj){const ak={};for(const k in net.guests){const h=net.guests[k];if(!h.upd)ak[h.slot]=net.rc[k]||{};}   // which presses each guest has had acted on
-      obj=Object.assign({k:'s',sq:++net.seq,ak},packSnap());}
+    if(!obj){const ak={},aq={};for(const k in net.guests){const h=net.guests[k];if(!h.upd){ak[h.slot]=net.rc[k]||{};aq[h.slot]=h.aq||0;}}   // which presses (and frames) each guest has had acted on
+      obj=Object.assign({k:'s',sq:++net.seq,ak,aq},packSnap());}
     if(ch.relay){   // ...and only the parts that changed (the relay delivers in order, so the guest can piece them together)
       if(!parts){parts={};for(const k in obj)if(k!=='k'&&k!=='sq')parts[k]=JSON.stringify(obj[k]);}
       const last=ch.lastParts;ch.sentN=(ch.sentN||0)+1;ch.lastParts=parts;
@@ -1305,7 +1339,7 @@ function joinGame(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');i
   if(code===arc.tag){say("That's your own friend code. Type your friend's code instead.");return;}
   if(!arc.ready){say('Connecting to the online service… joining as soon as it is ready.');const t=setInterval(()=>{if(arc.ready){clearInterval(t);joinGame(code);}},300);setTimeout(()=>clearInterval(t),15000);return;}
   if(!arcIsFriend(code))arcAddFriend(code);   // people you play with become friends, on both lists
-  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};net.base=null;net.prevSnap=net.curSnap=null;net.ack=null;const f=arc.friends.find(f=>f.code===code);say('Connecting to '+((f&&f.name)||code)+'…');
+  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};net.q=0;net.base=null;net.prevSnap=net.curSnap=null;net.ack=null;const f=arc.friends.find(f=>f.code===code);say('Connecting to '+((f&&f.name)||code)+'…');
   const pc=newPC(code);net.pc=pc;
   wireHostLink(pc.createDataChannel('game',{ordered:false,maxRetransmits:0}));
   wireFile(pc.createDataChannel('file',{ordered:true}),null,()=>leaveOnline());
@@ -1319,13 +1353,15 @@ function useRelay(){if(net.role!=='guest'||net.upd||(net.ch&&net.ch.relay))retur
   send('OFFER',net.host,{relay:1,name:arc.name,v:GAME_BUILD});}
 function wireHostLink(ch){net.ch=ch;const mine=()=>net.ch===ch;
   ch.onopen=()=>{if(!mine())return;net.lastHeard=Date.now();if(net.peerBuild!==GAME_BUILD){net.upd=true;return;}say('Connected! You are player '+(net.slot+1)+'.');lobbyChanged();};
-  ch.onclose=()=>{if(!mine())return;if(net.role==='guest'&&!net.upd){if(!ch.relay&&net.pc){useRelay();return;}say('The host closed the game.');leaveOnline();}};
+  ch.onclose=()=>{if(!mine())return;if(net.role==='guest'&&!net.upd){if(!ch.relay&&net.pc){useRelay();   // the direct link dropped: try the relay, and give up if that doesn't answer
+      setTimeout(()=>{if(net.role==='guest'&&!net.upd&&!(net.ch&&net.ch.readyState==='open')){say('Lost the connection to the host.');leaveOnline();}},8000);return;}
+    say('The host closed the game.');leaveOnline();}};
   ch.onmessage=e=>{if(!mine())return;net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k!=='s'||m.sq<=net.lastSeq)return;
     if(m.d){if(!net.base)return;const x=m._x;m=Object.assign({},net.base,m);delete m.d;delete m._x;if(x)for(const k of x)delete m[k];}
     net.base=m;net.lastSeq=m.sq;net.ack=(m.ak&&m.ak[net.slot])||null;
     net.prevSnap=net.curSnap;net.prevAt=net.curAt;net.curSnap=m;net.curAt=performance.now();net.smDone=false;net.snap=m;};}
 function guestKey(a,down){const g=net.gIn;if(down&&!g[a])net.cnt[a]=(net.cnt[a]||0)+1;g[a]=down?1:0;sendInput();}
-function sendInput(){if(net.ch&&net.ch.readyState==='open')try{net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt}));}catch(e){}}
+function sendInput(){if(net.ch&&net.ch.readyState==='open')try{net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt,q:net.q}));}catch(e){}}
 setInterval(()=>{if(net.role==='guest')sendInput();},100);
 setInterval(()=>{const now=Date.now();   // someone closed their game without saying goodbye
   if(net.role==='host')for(const c in net.guests){const g=net.guests[c];if(!g.upd&&g.ch&&g.ch.readyState==='open'&&now-(g.last||now)>QUIET_DROP)dropPeer(c,g.name+' left the game.');}
@@ -1388,6 +1424,7 @@ function leaveOnline(quiet){
   if(!quiet){if(net.role==='host')for(const c in net.guests)send('ANSWER',c,{bye:1});if(net.role==='guest'&&net.host)send('OFFER',net.host,{bye:1});}   // say goodbye
   if(net.role==='host')for(const c in net.guests){const g=net.guests[c];delete net.guests[c];try{g.ch&&g.ch.close();}catch(e){}try{g.pc&&g.pc.close();}catch(e){}}
   if(net.role==='guest'){const ch=net.ch,pc=net.pc;net.ch=null;net.pc=null;try{ch&&ch.close();}catch(e){}try{pc&&pc.close();}catch(e){}}
+  if(net.role==='host'&&/^(You are hosting|Invite sent to)/.test(net.msg))net.msg='';   // no longer true once you stop hosting
   Object.assign(net,{role:null,host:null,guests:{},pc:null,ch:null,cand:[],snap:null,upd:false,peerBuild:null,relayAsk:0});lobbyChanged();}
 // --- the Arcade: start-up requests and the way back ---
 const ARCADE_URL=ARC_QS.get('arcade')||arcArcadeUrl();
@@ -1413,39 +1450,43 @@ function goArcade(){if(!IN_PREVIEW){backToArcade();return;}
 // the online panel
 const netdlg=document.getElementById('netdlg'),netMsg=document.getElementById('net-msg');
 let autoClose=false,connAt=0;
-function openOnline(auto){autoClose=!!auto;netdlg.hidden=false;renderNet();if(!auto)try{document.getElementById('net-input').focus();}catch(e){}}
+function openOnline(auto){autoClose=!!auto;netdlg.hidden=false;renderNet();}
 function closeNet(){netdlg.hidden=true;try{cv.focus({preventScroll:true});}catch(e){}}
 function setNetTitle(){document.getElementById('win-title').textContent=GAME_NAME+(net.role==='host'&&anyGuests()?' — Online (you are Player 1)':net.role==='guest'&&net.ch&&net.ch.readyState==='open'?' — Online (you are Player '+(net.slot+1)+')':'');}
 function renderNet(){
   setNetTitle();if(netdlg.hidden)return;
-  netMsg.textContent=net.msg||(!arc.ready?(arcStatusLine()||'Connecting…'):
-    net.role?'':'Click a friend to invite them or join their game. Or host, and they can join you.');
-  document.getElementById('net-mycode').textContent=arc.tag;
+  netMsg.textContent=net.msg||(!arc.ready?(arcStatusLine()||arcConnNote()):
+    net.role?'':'Your game is open: anyone can click your name to join you. Or click a name below to join or invite them.');
   const ul=document.getElementById('net-friends');ul.innerHTML='';
   const fl=arcFriendList(),ev=arcEveryoneList();
   const sub=t=>{const li=document.createElement('li');li.className='sub';li.textContent=t;ul.appendChild(li);};
   const row=f=>{const act=friendAction(f),li=document.createElement('li'),b=document.createElement('button');b.className='nf';b.disabled=!act;
     b.innerHTML='<i></i><span><b></b><span class="st"></span></span><em></em>';
-    b.querySelector('i').style.background=f.status==='offline'?'#5a6678':f.status==='hosting'?'#ff9a1f':f.status==='playing'||f.status==='full'?'#b37bff':'#2bffb0';
+    b.querySelector('i').style.background=f.status==='offline'?'#5a6678':f.status==='hosting'||f.status==='idle'?'#ff9a1f':f.status==='playing'||f.status==='full'?'#b37bff':'#2bffb0';
     b.querySelector('b').textContent=f.name;b.querySelector('.st').textContent=arcDescribe(f);b.querySelector('em').textContent=act?act.label:'';
     if(act)b.onclick=()=>{autoClose=act.label==='Join';act.go();renderNet();};
     li.appendChild(b);ul.appendChild(li);};
-  if(!fl.length&&!ev.length){const li=document.createElement('li');li.innerHTML='<span class="st">Nobody else is online right now. Anyone who opens the Arcade or a game shows up here.</span>';ul.appendChild(li);}
-  if(fl.length){sub('Friends');fl.forEach(row);}
-  if(ev.length){sub('Everyone online');ev.forEach(row);}
+  const note=t=>{const li=document.createElement('li');li.innerHTML='<span class="st"></span>';li.firstChild.textContent=t;ul.appendChild(li);};
+  const canClick=fl.concat(ev).some(f=>friendAction(f));document.getElementById('net-ph').hidden=!canClick;
+  const all=fl.concat(ev),on=all.filter(f=>f.status!=='offline'),off=all.filter(f=>f.status==='offline');
+  if(!on.length&&net.role!=='guest')note(arcConnNote()||(net.role==='host'?'Nobody else is online right now. Send someone your invite link, and they can join you here.':"Nobody else is online right now. They'll show up here as soon as they open the Arcade or a game."));
+  else if(!canClick&&net.role!=='guest'&&!(net.role==='host'&&anyGuests()))note("Everyone online is in a game right now. You can invite them when they're done.");
+  if(all.length){if(!canClick)sub('Players');on.forEach(row);off.slice(0,5).forEach(row);if(off.length>5)note('+ '+(off.length-5)+' more offline');}
   const host=net.role==='host',seats=document.getElementById('net-seats-wrap');seats.hidden=!host;
   if(host){const sl=document.getElementById('net-seats');sl.innerHTML='';const lp=lobbyPlayers();
     for(let k=0;k<MAX_PLAYERS;k++){const p=lp.find(q=>q.slot===k),li=document.createElement('li');li.innerHTML='<i></i><span></span>';li.querySelector('i').style.background=PCOL[k].a;
       li.querySelector('span').textContent=(k+1)+'  '+(p?p.name+(p.ready===false?' (connecting…)':''):'waiting…');sl.appendChild(li);}
     const st=document.getElementById('net-start');st.textContent=gameStatus()==='idle'||gmode!=='vs'?'Start game':'Back to the game';}
   document.getElementById('net-lobby').hidden=false;
-  document.getElementById('net-join').hidden=!!net.role;
-  const hb=document.getElementById('net-host');hb.hidden=!!net.role;
+  document.getElementById('net-inv').hidden=net.role==='guest';
+  const hb=document.getElementById('net-host');hb.hidden=true;   // no need to host: your game is open whenever you're on its menu
   document.getElementById('cmd-leave').hidden=!net.role;
   document.getElementById('win-title').textContent=GAME_NAME+(net.role==='host'&&anyGuests()?' — Online (you are Player 1)':net.role==='guest'&&net.ch&&net.ch.readyState==='open'?' — Online (you are Player '+(net.slot+1)+')':'');}
+let lastNg=0,wasLive=false;
 function onLobbyChange(){
+  const ng=net.role==='host'?Object.values(net.guests).filter(g=>!g.upd&&g.ch&&g.ch.readyState==='open').length:0;if(ng>lastNg)netdlg.hidden=false;lastNg=ng;   // someone joined your lobby: show who's in
   const live=net.role==='guest'&&net.ch&&net.ch.readyState==='open';
-  if(live&&!connAt){connAt=Date.now();autoClose=true;}if(!live&&connAt&&!net.role){netdlg.hidden=false;toTitle();}if(!live)connAt=0;
+  if(live&&!connAt){connAt=Date.now();autoClose=true;}if(live)wasLive=true;else if(wasLive&&!net.role){wasLive=false;netdlg.hidden=false;toTitle();}if(!live)connAt=0;
   renderNet();}
 setInterval(()=>{if(autoClose&&connAt&&!netdlg.hidden&&Date.now()-connAt>1500&&net.role==='guest'){autoClose=false;closeNet();}},250);   // joined: get the panel out of the way
 function onInvite(code,name,p){if(net.role)return;
@@ -1460,7 +1501,9 @@ document.getElementById('net-close').addEventListener('click',e=>{e.stopPropagat
 document.getElementById('net-host').addEventListener('click',e=>{e.stopPropagation();hostGame();renderNet();});
 document.getElementById('net-go').addEventListener('click',()=>{autoClose=true;});
 document.getElementById('net-start').addEventListener('click',e=>{e.stopPropagation();if(gameStatus()==='idle'||gmode!=='vs')startOnlineGame();closeNet();});
-document.getElementById('net-join').addEventListener('submit',e=>{e.preventDefault();const c=document.getElementById('net-input').value.trim();if(c.replace(/[^A-Za-z0-9]/g,'').length!==6){netMsg.textContent='Friend codes are 6 letters or numbers.';return;}autoClose=true;joinGame(c);});
+{let invT=0;document.getElementById('net-invlink').addEventListener('click',async e=>{e.stopPropagation();const b=e.currentTarget,m=document.getElementById('net-invmsg'),r=await arcCopyInvite();if(r==='cancel')return;
+  if(r==='copied'||r==='shared'){b.textContent=r==='copied'?'Link copied ✓':'Link shared ✓';clearTimeout(invT);invT=setTimeout(()=>{b.textContent='Copy invite link';},3000);m.textContent='Send it to a friend. When they open it, you\'re on each other\'s Players lists.';}
+  else m.textContent='Send this link to a friend: '+r;});}
 netdlg.addEventListener('click',e=>e.stopPropagation());
 
 /* ---------- full screen ---------- */
