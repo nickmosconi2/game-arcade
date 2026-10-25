@@ -482,8 +482,9 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <p>Game controllers work too: the stick or d-pad moves and drops, A turns clockwise, B anticlockwise, Start pauses. On a phone, use the buttons under the game.</p>
 
       <h3>How to play</h3>
-      <p>Beans drop into your well in pairs. Line up <b>four or more of the same colour</b> (side by side or on top of each other) and they pop. Beans above fall down, and if that lines up another group, it pops too: that's a <b>chain</b>, and chains are worth far more.</p>
-      <p>Every pop sends <b>refugee beans</b> into your opponent's well. They show up as faces along the top of the well before they fall. Refugee beans don't join up with anything; they only go when a group pops right next to them. If you pop beans while refugees are on their way to you, you cancel them out first.</p>
+      <p>Beans drop into your well in pairs. Line up <b>four or more of the same colour</b> (side by side or on top of each other) and they pop. Beans above fall down, and if that lines up another group, it pops too: that's a <b>chain</b>. Each link of a chain multiplies the points by more than the last: ×8, ×16, ×32, ×64 and up, as far as ×999.</p>
+      <p><b>Refugee beans you send:</b> a single group of 4 sends 1. A 2-chain sends a whole row (6), a 3-chain three rows (18), and from there every link triples it: 54 for a 4-chain, 162 for a 5-chain. Bigger groups add a little: one more for every bean past 4. No more than 4 rows land at once; the rest follow on your opponent's next drop.</p>
+      <p>Every pop sends <b>refugee beans</b> into your opponent's well (see below for how many). They show up as faces along the top of the well before they fall. Refugee beans don't join up with anything; they only go when a group pops right next to them. If you pop beans while refugees are on their way to you, you cancel them out first.</p>
       <p>Your well fills up from the bottom. When the beans reach the top of the third column, where new pairs come in, you lose. Squeeze the pair between two walls and press turn twice quickly to flip it over.</p>
       <p>While a chain is going, your score shows what it's worth: points × multiplier, for example 50×18.</p>
 
@@ -513,7 +514,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=3;   // goes up by one with every update
+const GAME_BUILD=8;   // goes up by one with every update
 const GAME_ID='meanbean',GAME_NAME="Dr. Robotnik's Mean Bean Machine";
 const SNAP_SMOOTH={O:[4],P:[1]};   // online guests: attack orbs and pop bursts glide between snapshots (the falling pair glides by itself)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -731,8 +732,10 @@ const LEVEL_NAMES=['EASY','EASY','NORMAL','HARD','HARDEST'];
 const COLS=6,ROWS=13,CELL=16,GARB=5,EMPTY=-1,HIDDEN=1;
 const CHAIN_POWER=[0,8,16,32,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,544,576,608,640,672];
 const COLOR_BONUS=[0,3,6,12,24];
+// keeps climbing past the 24th link (a long streak of drops that all pop), up to the ×999 limit
+const chainPower=n=>n<=CHAIN_POWER.length?CHAIN_POWER[n-1]:Math.min(999,CHAIN_POWER[CHAIN_POWER.length-1]+32*(n-CHAIN_POWER.length));
 const groupBonus=n=>n<5?0:n>=11?10:n-3;
-const T={lock:16,soft:8,popFlash:26,particle:28,land:7,spawnWait:6,das:10,arr:3,v0:2.5,acc:0.14,vmax:9,target:70,maxDrop:30};
+const T={lock:16,soft:8,popFlash:26,particle:28,land:7,spawnWait:6,das:10,arr:3,v0:2.5,acc:0.14,vmax:9,target:70,maxDrop:24};   // at most 4 rows of refugee beans land at once
 const BEANC=['r','y','g','p','b'];
 const idx=(r,c)=>r*COLS+c;
 
@@ -769,7 +772,7 @@ function tryMove(b,dx){const p=b.piece;if(!p)return false;if(canPlace(b,p.col+dx
 function lockPiece(b){const p=b.piece,d=SATD[p.rot];
   const put=(c,py,col)=>{const r=Math.round((py+16)/16);if(r>=0&&r<ROWS){b.g[idx(r,c)]=col;b.sq[idx(r,c)]=T.land;}};
   put(p.col,p.py,p.a);put(p.col+d[0]/16,p.py+d[1],p.b);b.piece=null;b.placed++;sfx('land');
-  b.chain=0;settle(b);}
+  b.chain=0;settle(b);}   // every drop starts a fresh chain reaction
 // beans with nothing under them fall (accelerating, as in the video)
 function settle(b){let any=false;
   for(let c=0;c<COLS;c++){let w=ROWS-1;
@@ -791,20 +794,24 @@ function findGroups(g){const seen=new Uint8Array(ROWS*COLS),groups=[];
   return groups;}
 function scoreStep(chain,groups,g){let beans=0,gb=0;const cols=new Set();
   for(const grp of groups){beans+=grp.length;gb+=groupBonus(grp.length);cols.add(g[grp[0]]);}
-  const mult=Math.max(1,Math.min(999,CHAIN_POWER[Math.min(chain-1,CHAIN_POWER.length-1)]+COLOR_BONUS[cols.size-1]+gb));
+  const mult=Math.max(1,Math.min(999,chainPower(chain)+COLOR_BONUS[cols.size-1]+gb));
   return {beans,mult,pts:10*beans*mult};}
 function checkPops(b){const groups=findGroups(b.g);
   if(!groups.length){endChain(b);return;}
-  b.chain++;b.maxChain=Math.max(b.maxChain,b.chain);
+  b.chain++;b.popped=true;b.maxChain=Math.max(b.maxChain,b.chain);
   const s=scoreStep(b.chain,groups,b.g);b.score+=s.pts;b.beans+=s.beans;b.ctext=s.beans*10+'×'+s.mult;b.ctextT=70;
   const cells=new Set();for(const grp of groups)for(const i of grp)cells.add(i);
   // refugee beans next to a popping group go too
   for(const i of [...cells]){const r=Math.floor(i/COLS),c=i%COLS;
     for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){const r2=r+dr,c2=c+dc;if(r2<HIDDEN||r2>=ROWS||c2<0||c2>=COLS)continue;if(b.g[idx(r2,c2)]===GARB)cells.add(idx(r2,c2));}}
   b.popCells=[...cells].map(i=>[i,b.g[i]]);b.ph='pop';b.popT=0;sfx('pop'+Math.min(b.chain,7));
-  attack(b,s.pts,groups[0][0]);}
+  // refugee beans sent: a lone group of 4 sends 1, a 2-chain 1 row (6), a 3-chain 3 rows (18), and from there the total
+  // triples with every link (54, 162, ...); every bean past 4 in a group, and every extra group in the same link, adds one more
+  const chainTotal=n=>n<=0?0:n===1?1:6*Math.pow(3,n-2);
+  let rocks=Math.min(9999,chainTotal(b.chain)-chainTotal(b.chain-1));for(const grp of groups)rocks+=grp.length-4;rocks+=groups.length-1;
+  attack(b,rocks,groups[0][0]);}
 // refugee beans: 70 points makes one; your own incoming ones are cancelled first
-function attack(b,pts,fromCell){b.gbuf+=pts;let n=Math.floor(b.gbuf/T.target);b.gbuf-=n*T.target;if(n<=0)return;
+function attack(b,rocks,fromCell){let n=rocks;if(n<=0)return;
   const opp=oppOf(b);
   if(b.pend>0){const k=Math.min(b.pend,n);b.pend-=k;n-=k;}
   const r=Math.floor(fromCell/COLS),c=fromCell%COLS,x0=b.x+c*CELL+8,y0=b.y+(r-1)*CELL+8;
