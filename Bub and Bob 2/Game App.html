@@ -608,7 +608,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=49;   // goes up by one with every update
+const GAME_BUILD=50;   // goes up by one with every update
 const GAME_ID='bubnbob2',GAME_NAME='Bub & Bob 2';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],B:[0,1],T:[4,5],D:[1,2],X:[1,2],RD:[1,2],S:[0,1]};   // online guest: what moves, so it glides between snapshots
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -642,7 +642,7 @@ arc.knAt={};
 const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
 function arcHandoff(){   // what to add to a link so the next page knows who you are
   return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible,r:arc.removed}));}
-let arcBC=null;try{arcBC=new BroadcastChannel('arcade-presence');}catch(e){}
+let arcBC=null;try{arcBC=new BroadcastChannel('arcade-presence-3');}catch(e){}
 if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
   if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
     if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
@@ -2989,7 +2989,7 @@ function closeNet(){if(!netdlg.classList.contains('docked'))netdlg.hidden=true;t
 function renderNet(){
   setNetUI();if(netdlg.hidden)return;
   netMsg.textContent=net.msg||(!arc.ready?(arcStatusLine()||arcConnNote()):
-    net.role?'':'Your game is open: anyone can click your name to join you. Or click a name below to join or invite them.');
+    '');
   const ul=document.getElementById('net-friends');ul.innerHTML='';
   const fl=arcFriendList(),ev=arcEveryoneList();
   const sub=t=>{const li=document.createElement('li');li.className='sub';li.textContent=t;ul.appendChild(li);};
@@ -3012,7 +3012,6 @@ function renderNet(){
   const here=on.filter(f=>f.game===GAME_ID),away=on.filter(f=>f.game!==GAME_ID);
   sub('In '+GAME_NAME+' ('+(here.length+1)+')');meRow();here.forEach(row);
   if(away.length){sub('Elsewhere');away.forEach(row);}
-  if(off.length){sub('Offline');off.slice(0,5).forEach(row);if(off.length>5)note('+ '+(off.length-5)+' more');}
   const host=net.role==='host',seats=document.getElementById('net-seats-wrap');seats.hidden=!host;
   if(host){const sl=document.getElementById('net-seats');sl.innerHTML='';const lp=lobbyPlayers();
     for(let k=0;k<MAX_PLAYERS;k++){const p=lp.find(q=>q.slot===k),li=document.createElement('li');li.innerHTML='<i></i><span></span>';li.querySelector('i').style.background=['#3ec43e','#3e8ee8'][k];

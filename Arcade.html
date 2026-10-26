@@ -167,10 +167,24 @@ button,input{font:inherit;color:inherit}
 .pop-n{margin:4px 12px 8px;font-size:13px;color:var(--muted);max-width:240px}
 .pop button.join{color:var(--or)}
 .pop button.rm{color:var(--muted);font-weight:500;font-size:13px;border-top:1px solid rgba(41,231,255,.12);margin-top:4px}
-.chip.big{align-self:stretch;white-space:nowrap;padding:3px 10px;letter-spacing:.08em;min-width:9.6em}
+.chip.big{align-self:stretch;white-space:nowrap;padding:3px 12px;letter-spacing:.1em;min-width:6.4em}
 .chip.done{background:rgba(43,255,176,.14);border-color:var(--go);color:var(--go)}
 .pop .linkbox{display:block;width:100%;margin:4px 0 6px;border:1px solid var(--edge);background:rgba(2,8,16,.8);color:var(--cy);padding:8px 10px;font-size:13px}
 #my-name.need{box-shadow:0 0 0 1px var(--or);}
+#my-name[readonly]{cursor:default;pointer-events:none;text-overflow:ellipsis}
+.top .me .field{padding-left:14px}.top .me .field label{display:none}   /* the name speaks for itself; Sign off sits beside it */
+.signoff{border:0;border-left:1px solid var(--edge);background:none;color:var(--muted);font:600 11px var(--f-ui);letter-spacing:.12em;text-transform:uppercase;padding:2px 2px 2px 12px;cursor:pointer;white-space:nowrap}
+.signoff:hover{color:var(--cy)}
+/* first visit: what's your name? */
+.namebox{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(2,5,12,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.namebox[hidden]{display:none}
+.namebox form{width:min(100%,420px);padding:30px 30px 26px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box}
+.namebox h2{margin:0;font:900 28px/1.1 var(--f-ui);letter-spacing:.06em;text-transform:uppercase;color:#fff;text-shadow:var(--glow)}
+.namebox label{font-size:15px;color:#b6c8dc}
+.namebox input{border:1px solid var(--edge);background:rgba(2,8,16,.85);color:#fff;font:700 24px var(--f-ui);letter-spacing:.08em;text-transform:uppercase;padding:12px 14px}
+.namebox input:focus{outline:none;border-color:var(--cy);box-shadow:0 0 14px rgba(41,231,255,.35)}
+.namebox .btn{align-self:flex-start}
+.namebox .hint{margin:0}
 
 
 /* invite popover and toast */
@@ -215,8 +229,8 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
   <label class="bgpick"><span>Background</span>
     <select id="bg-pick"><option value="tron">Tron</option><option value="mall">Mall Arcade</option><option value="lorenzos">Lorenzo's</option></select></label>
   <div class="me">
-    <div class="field"><label for="my-name">Your name</label><input id="my-name" maxlength="12" spellcheck="false"></div>
-    <button class="chip big" id="link" title="Copy the Arcade's address to send to friends">Share Arcade</button>
+    <div class="field"><label for="my-name">Your name</label><input id="my-name" maxlength="12" spellcheck="false" readonly tabindex="-1"><button class="signoff" id="signoff" title="Sign off: the next person can enter their own name">Sign off</button></div>
+    <button class="chip big" id="link" title="Copy the Arcade's address to send to friends">Share</button>
   </div>
 </header>
 
@@ -233,8 +247,6 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
   <aside class="friends frame" aria-label="Players">
     <h3>Players <span class="count" id="count"></span></h3>
     <ul class="list" id="list"></ul>
-    <div id="off-wrap" hidden><h3 class="sub">Offline</h3><ul class="list" id="offline"></ul>
-      <button class="more" id="more" hidden></button></div>
     <p class="hint" id="add-msg">Click anyone online to play with them.</p>
     <label class="toggle"><input type="checkbox" id="visible"> Show me as online</label>
     <p class="status" id="status"></p>
@@ -242,6 +254,16 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
   <section class="games frame" aria-label="Games"><h3>Games <span class="count">Pick one, then press Play</span></h3><div class="glist" id="shelf"></div></section>
   </div>
 </main>
+
+<div class="namebox" id="namebox" hidden role="dialog" aria-modal="true" aria-labelledby="nb-title">
+  <form class="frame" id="nb-form" autocomplete="off">
+    <h2 id="nb-title">Welcome to the Arcade</h2>
+    <label for="nb-name">What's your name?</label>
+    <input id="nb-name" maxlength="12" spellcheck="false" placeholder="YOUR NAME">
+    <button class="btn play" type="submit">Let's play</button>
+    <p class="hint" id="nb-msg">Friends will see this name until you sign off.</p>
+  </form>
+</div>
 
 <div class="toast" id="toast" hidden role="alert">
   <span id="toast-msg"></span>
@@ -284,7 +306,7 @@ arc.knAt={};
 const arcId=c=>'arcade-'+c.toLowerCase(), arcCode=id=>(id||'').slice(7).toUpperCase();
 function arcHandoff(){   // what to add to a link so the next page knows who you are
   return '#arc='+encodeURIComponent(JSON.stringify({t:arc.tag,n:arc.name,f:arc.friends,v:arc.visible,r:arc.removed}));}
-let arcBC=null;try{arcBC=new BroadcastChannel('arcade-presence');}catch(e){}
+let arcBC=null;try{arcBC=new BroadcastChannel('arcade-presence-3');}catch(e){}
 if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
   if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
     if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
@@ -509,25 +531,21 @@ function personRow(f,isFriend){const d=describe(f),li=document.createElement('li
     return li;}
 function render(){
   const fl=arcFriendList().concat(arcEveryoneList()),on=fl.filter(f=>f.status!=='offline'),off=fl.filter(f=>f.status==='offline'),list=$('list');
-  $('count').textContent=fl.length?on.length+' of '+fl.length+' online':'';
+  $('count').textContent=on.length?on.length+' online':'';
   list.innerHTML='';
   const quiet=arcConnNote()||(arcSettling()?'':null);   // while connecting: no message at all
   if(!on.length&&quiet!==''){const li=document.createElement('li');li.className='hint';li.style.padding='6px 0 2px';
-    li.textContent=quiet||(fl.length?'Nobody else is online right now. They show up here as soon as they open the Arcade or a game.':'Nobody else is here yet. Anyone who opens the Arcade shows up here, and stays on your list.');list.appendChild(li);}
+    li.textContent=quiet||'Nobody else is online right now. They show up here as soon as they open the Arcade or a game.';list.appendChild(li);}
   {const li=document.createElement('li');li.className='row me';   // you, first on the list
     li.innerHTML='<span class="pick" style="cursor:default"><span class="av" aria-hidden="true"></span><span class="who"><b></b><small></small></span></span>';
     const av=li.querySelector('.av');av.textContent=(arc.name||'?')[0];av.style.setProperty('--a',tint(arc.tag));li.style.setProperty('--s',arc.visible?'var(--go)':'var(--off)');
     li.querySelector('b').textContent=arc.name+' (you)';li.querySelector('small').textContent=arc.visible?'Online in the Arcade':'Hidden: others see you as offline';
     list.prepend(li);}
   for(const f of on)list.appendChild(personRow(f,true));
-  const ol=$('offline');ol.innerHTML='';$('off-wrap').hidden=!off.length;
-  const show=showAllOff?off:off.slice(0,3);for(const f of show)ol.appendChild(personRow(f,true));
-  $('more').hidden=off.length<=3;$('more').textContent=showAllOff?'Show fewer':'Show all '+off.length+' offline';
   $('visible').checked=arc.visible;
   $('status').textContent=arcStatusLine();
   $('my-name').classList.toggle('need',arc.name==='PLAYER');
 }
-let showAllOff=false;$('more').onclick=()=>{showAllOff=!showAllOff;render();};
 function confirmRemove(f){return window.confirm?confirm('Remove '+f.name+' from your Players list?'):true;}
 let pop=null;
 function closePop(){if(pop){pop.remove();pop=null;}}
@@ -559,27 +577,34 @@ $('toast-yes').onclick=()=>{if(invited&&invited.g)go(invited.g,{join:invited.p.j
 $('toast-no').onclick=()=>{$('toast').hidden=true;invited=null;};
 
 // ---- you ----
-$('my-name').value=arc.name==='PLAYER'?'':arc.name;$('my-name').placeholder='PLAYER';
-$('my-name').addEventListener('change',e=>arcSetName(e.target.value));
-$('my-name').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
+const showName=()=>{$('my-name').value=arc.name==='PLAYER'?'':arc.name;};showName();
+const needName=()=>arc.name==='PLAYER';
+let afterName=null;   // what to do once they've told us their name
+function askName(then){afterName=then||null;$('namebox').hidden=false;$('nb-name').value='';setTimeout(()=>$('nb-name').focus(),30);}
+$('nb-form').addEventListener('submit',e=>{e.preventDefault();const v=$('nb-name').value.trim().toUpperCase().replace(/\s+/g,' ');
+  if(!v||v==='PLAYER'){$('nb-msg').textContent='Type the name your friends will see.';$('nb-name').focus();return;}
+  arcSetName(v);showName();$('namebox').hidden=true;$('nb-msg').textContent='Friends will see this name until you sign off.';
+  const t=afterName;afterName=null;if(t)t();else{arcStart();render();}});
+$('signoff').onclick=()=>{arcStop();arc.name='PLAYER';arcSv('name','PLAYER');arc.tag=arcRand(6);arcSv('tag',arc.tag);   // a new player from here on
+  arc.friends=[];arcSv('friends',arc.friends);arc.seen={};arc.everyone={};showName();render();askName();};
 let linkT=0;
 $('link').onclick=async e=>{const btn=e.currentTarget,m=$('add-msg');m.classList.remove('err');closePop();
   const r=await arcCopyInvite();if(r==='cancel')return;
-  if(r==='copied'||r==='shared'){btn.textContent=r==='copied'?'Link copied ✓':'Link shared ✓';btn.classList.add('done');clearTimeout(linkT);
-    linkT=setTimeout(()=>{btn.textContent='Share Arcade';btn.classList.remove('done');},3000);
+  if(r==='copied'||r==='shared'){btn.textContent=r==='copied'?'Copied ✓':'Shared ✓';btn.classList.add('done');clearTimeout(linkT);
+    linkT=setTimeout(()=>{btn.textContent='Share';btn.classList.remove('done');},3000);
     m.textContent='Link '+(r==='copied'?'copied':'shared')+'. Send it to friends so they can play.';return;}
   pop=document.createElement('div');pop.className='pop';pop.innerHTML='<p class="pop-n">Copy this link and send it to friends so they can play.</p><input class="linkbox" readonly>';
   const box=pop.querySelector('input');box.value=r;document.body.appendChild(pop);const b=btn.getBoundingClientRect();
   pop.style.top=(b.bottom+6)+'px';pop.style.left=Math.max(8,Math.min(b.right-pop.offsetWidth,innerWidth-pop.offsetWidth-8))+'px';box.focus();box.select();};
 arc.onFriendAdded=name=>{const m=$('add-msg');m.classList.remove('err');m.textContent=name+' added you, so they are now on your friends list too.';};
 {const add=ARC_QS.get('add');if(add){const err=arcAddFriend(add),m=$('add-msg');
-  if(!err||err==='Already on your list.'){m.textContent="You're on each other's Players lists now. Type your name above so they know who you are.";}else{m.classList.add('err');m.textContent=err;}
+  if(!err||err==='Already on your list.'){m.textContent="You're on each other's Players lists now.";}else{m.classList.add('err');m.textContent=err;}
   try{const q=new URLSearchParams(location.search);q.delete('add');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}catch(e){}}}
 $('visible').onchange=e=>arcSetVisible(e.target.checked);
 arc.me=()=>({status:'arcade'});arc.onChange=render;
 const GO=ARC_QS.get('go');
 if(GO){const g=byId(GO),params={};for(const k of ['join','host','invite'])if(ARC_QS.get(k))params[k]=ARC_QS.get(k);
-  if(g){go(g,params);return;}
+  if(g){if(needName())askName(()=>go(g,params));else go(g,params);return;}
   $('add-msg').textContent="That game isn't in this Arcade yet.";}
 
 // a game whose folder has been deleted is left out: its picture won't load any more
@@ -590,7 +615,7 @@ Promise.all(GAMES.map(gameThere)).then(ok=>{
   if(!GAMES.includes(cur))cur=GAMES[0];
   if(GAMES.length){shelf();feature(cur);}else{$('stage').hidden=true;$('shelf').innerHTML='<p class="hint">No games here yet.</p>';}
   render();});
-render();arcStart();
+render();if(needName())askName();else arcStart();
 window.addEventListener('pagehide',arcStop);
 })();
 </script>
