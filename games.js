@@ -1,5 +1,7 @@
 /* The games in this Arcade, one folder each. Claude adds an entry here for every new game.
-   file and pictures are paths from this folder. color is the backdrop behind the game's pictures. */
+   file and pictures are paths from this folder. color is the backdrop behind the game's pictures.
+   line: a short line about the game for the Arcade's games list. The Arcade page never mentions player counts or
+   online play (players, online): those show only inside the game, in its lobby. */
 window.ARCADE_GAMES=[
   {id:'meanbean',
    name:"Dr. Robotnik's Mean Bean Machine",
@@ -9,7 +11,8 @@ window.ARCADE_GAMES=[
    color:'#3fae3a',
    players:'1–2 players',
    online:true,
-   about:'Line up four beans of a colour to pop them and bury your opponent in refugee beans: all 13 Scenario stages against Robotnik\'s henchbots, head-to-head 2P (online too) and Exercise mode.'},
+   about:'Line up four beans of a colour to pop them and bury your opponent in refugee beans: all 13 Scenario stages against Robotnik\'s henchbots, plus Exercise mode.',
+   line:'Pop beans in fours, bury Robotnik'},
   {id:'bonkheads',
    name:'Bonkheads',
    file:'Bonkheads/Bonkheads.html',
@@ -18,7 +21,8 @@ window.ARCADE_GAMES=[
    color:'#7bd84a',
    players:'1–2 players (4-player preview)',
    online:true,
-   about:'Grag and Thog bump pests from below and kick them off the platforms: all 144 levels of the 1998 classic, with webs, springs, ice, TNT, gems and a boss every sixth level.'},
+   about:'Grag and Thog bump pests from below and kick them off the platforms: all 144 levels of the 1998 classic, with webs, springs, ice, TNT, gems and a boss every sixth level.',
+   line:'Bump pests off 144 platform levels'},
   {id:'boom',
    name:'BOOM',
    file:'Boom/BOOM.html',
@@ -27,7 +31,8 @@ window.ARCADE_GAMES=[
    color:'#c2461f',
    players:'1–4 players',
    online:true,
-   about:'Bomberman meets Doom: a space marine with endless bombs clears eight alien-infested worlds, with bosses, coins and the EXTRA game.'},
+   about:'Bomberman meets Doom: a space marine with endless bombs clears eight alien-infested worlds, with bosses, coins and the EXTRA game.',
+   line:'Bomb your way through 8 alien worlds'},
   {id:'bubnbob2',
    name:'Bub & Bob 2',
    file:'Bub and Bob 2/Game App.html',
@@ -36,5 +41,6 @@ window.ARCADE_GAMES=[
    color:'#2f6fd6',
    players:'1–2 players',
    online:true,
-   about:'Blow bubbles, trap critters and pop them for treats across 120 rounds, with special rounds, power-ups and a friend at your side.'}
+   about:'Blow bubbles, trap critters and pop them for treats across 120 rounds, with special rounds and power-ups.',
+   line:'Trap critters in bubbles, 120 rounds'}
 ];
