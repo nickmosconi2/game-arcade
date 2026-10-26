@@ -335,6 +335,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 .netfriends li.sub{color:var(--a-cy)!important}
 #a-players[hidden]{display:none}
 #net-msg:empty{display:none}
+#net-inv{display:none!important}
 </style>
 <!-- ===== end of ARCADE GAME SKIN (style part) ===== -->
 <header class="menubar">
@@ -607,7 +608,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=48;   // goes up by one with every update
+const GAME_BUILD=49;   // goes up by one with every update
 const GAME_ID='bubnbob2',GAME_NAME='Bub & Bob 2';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],B:[0,1],T:[4,5],D:[1,2],X:[1,2],RD:[1,2],S:[0,1]};   // online guest: what moves, so it glides between snapshots
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -646,6 +647,25 @@ if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
   if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
     if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
   else if(d.busyFor===arc.tab){arc.refused=true;arc.onChange();}};
+/* The free PeerJS service only passes on messages shaped like WebRTC set-up (an offer or answer with a real SDP, or an
+   ICE candidate) and hangs up on anything else, or on one message over about 16 KB. So every Arcade message that isn't
+   real WebRTC set-up travels inside a candidate-shaped envelope, in pieces when it's long. Always send with arcWire. */
+const ARC_PIECE=6000;let arcPieceN=0;const arcPieces={};
+function arcWire(ws,type,dst,payload){   // one message to dst over a broker socket
+  if(payload&&(payload.sdp||payload.candidate)){ws.send(JSON.stringify({type,dst,payload}));return;}   // real WebRTC set-up: as it is
+  const body=JSON.stringify(payload===undefined?null:payload);
+  const env=x=>JSON.stringify({type:'CANDIDATE',dst,payload:Object.assign({candidate:{candidate:'',sdpMid:'0',sdpMLineIndex:0},type:'data',connectionId:'arc'},x)});
+  if(body.length<=ARC_PIECE){ws.send(env({t:type,arc:body}));return;}
+  const id=++arcPieceN,n=Math.ceil(body.length/ARC_PIECE);for(let i=0;i<n;i++)ws.send(env({t:type,pc:[id,i,n],arc:body.slice(i*ARC_PIECE,(i+1)*ARC_PIECE)}));}
+function arcUnwrap(m){   // a message as it was sent, or null while its pieces are still arriving
+  const p=m&&m.payload;if(!m||m.type!=='CANDIDATE'||!p||p.connectionId!=='arc'||typeof p.arc!=='string')return m;
+  let body=p.arc;
+  if(Array.isArray(p.pc)){const [id,i,n]=p.pc,k=m.src+'#'+id,now=Date.now();
+    for(const q in arcPieces)if(now-arcPieces[q].at>30000)delete arcPieces[q];
+    const b=arcPieces[k]||(arcPieces[k]={parts:[],got:0,at:now});if(b.parts[i]==null){b.parts[i]=body;b.got++;}
+    if(b.got<n)return null;delete arcPieces[k];body=b.parts.join('');}
+  let pl;try{pl=JSON.parse(body);}catch(e){return null;}
+  return {type:p.t||'OFFER',src:m.src,dst:m.dst,payload:pl};}
 function arcStart(retry){   // retry: trying again on its own, so don't take over from another tab
   if(arc.ws||!arc.visible)return;
   if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
@@ -653,7 +673,7 @@ function arcStart(retry){   // retry: trying again on its own, so don't take ove
   if(arcBC&&retry!==true)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
-  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}m=arcUnwrap(m);if(!m)return;
     if(ARC_LOBBIES.includes(m.src)){arcFromDesk(m);return;}
     if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.connSince=0;arc.openAt=Date.now();arc.refused=false;arc.hbAt=Date.now();arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
@@ -664,10 +684,10 @@ function arcStart(retry){   // retry: trying again on its own, so don't take ove
   ws.onerror=()=>{};
 }
 function arcStop(){if(arc.ws&&arc.ready){   // say goodbye, so you show as offline straight away
-    for(const id of ARC_LOBBIES)try{arc.ws.send(JSON.stringify({type:'OFFER',dst:id,payload:{lobby:'bye'}}));}catch(e){}
+    for(const id of ARC_LOBBIES)try{arcWire(arc.ws,'OFFER',id,{lobby:'bye'});}catch(e){}
     for(const c in arc.seen)if(arc.seen[c].open)arcSend('OFFER',c,{gone:1});}
   arcDeskStop();arc.everyone={};arc.listAt=0;arc.connSince=0;const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
-function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}catch(e){}}
+function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arcWire(arc.ws,type,arcId(code),payload);}catch(e){}}
 function arcIsFriend(code){return arc.friends.some(f=>f.code===code);}
 function arcPing(){const now=Date.now(),kn=arc.friends.map(f=>[f.code,f.name,f.t||0]);
   const near=arc.friends.filter(f=>now-(f.t||0)<14*864e5||(arc.seen[f.code]&&arc.seen[f.code].open)||arc.everyone[f.code])   // recent players only, so it stays light
@@ -693,8 +713,8 @@ arcEvery(()=>{const now=Date.now(),HB='{"type":"HEARTBEAT"}';
    (a laptop asleep) can't hide anyone. If a desk is missing, the first page to notice becomes it. */
 const ARC_LOBBIES=['arcade-lobby-nm2','arcade-lobby-nm2b'];
 arc.everyone={};arc.desks={};arc.listAt=0;
-function arcHello(){if(arc.ws&&arc.ready){const pl=JSON.stringify(Object.assign({lobby:'hi',name:arc.name},arc.me()));
-  for(const id of ARC_LOBBIES)try{arc.ws.send('{"type":"OFFER","dst":"'+id+'","payload":'+pl+'}');}catch(e){}}}
+function arcHello(){if(arc.ws&&arc.ready){const pl=Object.assign({lobby:'hi',name:arc.name},arc.me());
+  for(const id of ARC_LOBBIES)try{arcWire(arc.ws,'OFFER',id,pl);}catch(e){}}}
 function arcFromDesk(m){const p=m.payload||{};
   if(m.type==='EXPIRE'){arcBeDesk(m.src);return;}
   if(p.lobby==='list'&&Array.isArray(p.list)){const now=Date.now();arc.listAt=now;
@@ -713,7 +733,7 @@ function arcKnow(code,name,t){   // remember a player; true if they're new to yo
 function arcBeDesk(id){if(!ARC_LOBBIES.includes(id)||arc.desks[id]||!arc.visible||!arc.ready)return;
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+id+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   const d={ws,who:{},hbAt:0,open:false};arc.desks[id]=d;
-  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}m=arcUnwrap(m);if(!m)return;
     if(m.type==='OPEN'){d.open=true;d.hbAt=Date.now();setTimeout(arcHello,300);}
     else if(m.type==='ID-TAKEN')arcDeskStop(id);   // another page got there first
     else if(m.type==='OFFER'&&m.payload&&(m.payload.lobby==='hi'||m.payload.lobby==='bye')){const now=Date.now(),code=arcCode(m.src);if(!/^[A-Z0-9]{6}$/.test(code))return;
@@ -722,7 +742,7 @@ function arcBeDesk(id){if(!ARC_LOBBIES.includes(id)||arc.desks[id]||!arc.visible
       for(const c in d.who)if(now-d.who[c].t>20000)delete d.who[c];
       const list=Object.values(d.who).map(x=>{const y=Object.assign({},x,{ago:now-x.t});delete y.t;return y;}),payload={lobby:'list',list};if(bye)payload.gone=[code];
       for(const c of fresh||bye?Object.keys(d.who):[code])   // someone new or someone leaving: tell everyone straight away
-        try{ws.send(JSON.stringify({type:'ANSWER',dst:arcId(c),payload}));}catch(err){}}};
+        try{arcWire(ws,'ANSWER',arcId(c),payload);}catch(err){}}};
   ws.onclose=()=>{if(arc.desks[id]===d)arcDeskStop(id);};ws.onerror=()=>{};}
 function arcDeskStop(id){for(const k of id?[id]:Object.keys(arc.desks)){const d=arc.desks[k];if(!d)continue;delete arc.desks[k];d.ws.onclose=null;try{d.ws.close();}catch(e){}}}
 function arcEveryoneList(){   // people online who aren't on your friends list yet
@@ -2831,7 +2851,7 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
 }
 // --- host ---
 function hostGame(){if(net.role)return;net.role='host';net.guests={};net.rc={};
-  say('You are hosting. Click a name below to invite them, or send a friend your invite link.');arcPing();}
+  say('You are hosting. Click a name below to invite them.');arcPing();}
 function wireGuestChannel(code,ch){const g=net.guests[code];if(!g)return;g.ch=ch;const mine=()=>net.guests[code]===g&&g.ch===ch;
   ch.onopen=()=>{if(!mine())return;g.last=Date.now();say(g.name+' joined as player '+(g.slot+1)+'.');lobbyChanged();};
   ch.onclose=()=>{if(mine())dropPeer(code,g.name+' left the game.');};
@@ -2980,14 +3000,14 @@ function renderNet(){
     if(act)b.onclick=()=>{autoClose=act.label==='Join';act.go();renderNet();};
     li.appendChild(b);ul.appendChild(li);};
   const meRow=()=>{const li=document.createElement('li'),b=document.createElement('button');b.className='nf';b.disabled=true;b.style.opacity=1;   // you, at the top of this game's list
-    b.innerHTML='<i></i><span><b></b><span class="st"></span></span><em></em>';b.querySelector('i').style.background='#29e7ff';b.querySelector('b').textContent=arc.name+' (you)';
-    const st=gameStatus(),r=net.role;b.querySelector('.st').textContent=r==='guest'?'Playing online':r==='host'?(anyGuests()?'Playing online':'Your game is open to join'):st==='idle'?'On the menu: anyone can join you':'Playing alone';
+    b.innerHTML='<i></i><span><b></b><span class="st"></span></span><em></em>';b.querySelector('i').style.background=arc.visible?'#2bffb0':'#5a6678';b.querySelector('b').textContent=arc.name+' (you)';
+    const st=gameStatus(),r=net.role;b.querySelector('.st').textContent=!arc.visible?'Hidden: others see you as offline':'Online · '+(r==='guest'?'playing online':r==='host'?(anyGuests()?'playing online':'anyone can join you'):st==='idle'?'anyone can join you':'playing alone');
     li.appendChild(b);ul.appendChild(li);};
   const note=t=>{const li=document.createElement('li');li.innerHTML='<span class="st"></span>';li.firstChild.textContent=t;ul.appendChild(li);};
   const canClick=fl.concat(ev).some(f=>friendAction(f));document.getElementById('net-ph').hidden=!canClick;document.getElementById('net-ph').textContent='Click a name to play';
   const all=fl.concat(ev),on=all.filter(f=>f.status!=='offline'),off=all.filter(f=>f.status==='offline');
   const quiet=arcConnNote()||(arcSettling()?'':null);   // while connecting: no message at all
-  if(!on.length&&net.role!=='guest'&&quiet!=='')note(quiet||(net.role==='host'?'Nobody else is online right now. Send someone your invite link, and they can join you here.':"Nobody else is online right now. They'll show up here as soon as they open the Arcade or a game."));
+  if(!on.length&&net.role!=='guest'&&quiet!=='')note(quiet||(net.role==='host'?'Nobody else is online right now. They can join you here as soon as they come online.':"Nobody else is online right now. They'll show up here as soon as they open the Arcade or a game."));
   else if(on.length&&!canClick&&net.role!=='guest'&&!(net.role==='host'&&anyGuests()))note("Everyone online is in a game right now. You can invite them when they're done.");
   const here=on.filter(f=>f.game===GAME_ID),away=on.filter(f=>f.game!==GAME_ID);
   sub('In '+GAME_NAME+' ('+(here.length+1)+')');meRow();here.forEach(row);

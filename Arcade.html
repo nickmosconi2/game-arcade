@@ -216,7 +216,7 @@ html[data-bg="lorenzos"] .world::before,html[data-bg="lorenzos"] .world::after{d
     <select id="bg-pick"><option value="tron">Tron</option><option value="mall">Mall Arcade</option><option value="lorenzos">Lorenzo's</option></select></label>
   <div class="me">
     <div class="field"><label for="my-name">Your name</label><input id="my-name" maxlength="12" spellcheck="false"></div>
-    <button class="chip big" id="link" title="Send this link to a friend. When they open it, you're on each other's Players lists.">Copy invite link</button>
+    <button class="chip big" id="link" title="Copy the Arcade's address to send to friends">Share Arcade</button>
   </div>
 </header>
 
@@ -289,6 +289,25 @@ if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
   if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
     if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
   else if(d.busyFor===arc.tab){arc.refused=true;arc.onChange();}};
+/* The free PeerJS service only passes on messages shaped like WebRTC set-up (an offer or answer with a real SDP, or an
+   ICE candidate) and hangs up on anything else, or on one message over about 16 KB. So every Arcade message that isn't
+   real WebRTC set-up travels inside a candidate-shaped envelope, in pieces when it's long. Always send with arcWire. */
+const ARC_PIECE=6000;let arcPieceN=0;const arcPieces={};
+function arcWire(ws,type,dst,payload){   // one message to dst over a broker socket
+  if(payload&&(payload.sdp||payload.candidate)){ws.send(JSON.stringify({type,dst,payload}));return;}   // real WebRTC set-up: as it is
+  const body=JSON.stringify(payload===undefined?null:payload);
+  const env=x=>JSON.stringify({type:'CANDIDATE',dst,payload:Object.assign({candidate:{candidate:'',sdpMid:'0',sdpMLineIndex:0},type:'data',connectionId:'arc'},x)});
+  if(body.length<=ARC_PIECE){ws.send(env({t:type,arc:body}));return;}
+  const id=++arcPieceN,n=Math.ceil(body.length/ARC_PIECE);for(let i=0;i<n;i++)ws.send(env({t:type,pc:[id,i,n],arc:body.slice(i*ARC_PIECE,(i+1)*ARC_PIECE)}));}
+function arcUnwrap(m){   // a message as it was sent, or null while its pieces are still arriving
+  const p=m&&m.payload;if(!m||m.type!=='CANDIDATE'||!p||p.connectionId!=='arc'||typeof p.arc!=='string')return m;
+  let body=p.arc;
+  if(Array.isArray(p.pc)){const [id,i,n]=p.pc,k=m.src+'#'+id,now=Date.now();
+    for(const q in arcPieces)if(now-arcPieces[q].at>30000)delete arcPieces[q];
+    const b=arcPieces[k]||(arcPieces[k]={parts:[],got:0,at:now});if(b.parts[i]==null){b.parts[i]=body;b.got++;}
+    if(b.got<n)return null;delete arcPieces[k];body=b.parts.join('');}
+  let pl;try{pl=JSON.parse(body);}catch(e){return null;}
+  return {type:p.t||'OFFER',src:m.src,dst:m.dst,payload:pl};}
 function arcStart(retry){   // retry: trying again on its own, so don't take over from another tab
   if(arc.ws||!arc.visible)return;
   if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
@@ -296,7 +315,7 @@ function arcStart(retry){   // retry: trying again on its own, so don't take ove
   if(arcBC&&retry!==true)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
-  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}m=arcUnwrap(m);if(!m)return;
     if(ARC_LOBBIES.includes(m.src)){arcFromDesk(m);return;}
     if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.connSince=0;arc.openAt=Date.now();arc.refused=false;arc.hbAt=Date.now();arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
@@ -307,10 +326,10 @@ function arcStart(retry){   // retry: trying again on its own, so don't take ove
   ws.onerror=()=>{};
 }
 function arcStop(){if(arc.ws&&arc.ready){   // say goodbye, so you show as offline straight away
-    for(const id of ARC_LOBBIES)try{arc.ws.send(JSON.stringify({type:'OFFER',dst:id,payload:{lobby:'bye'}}));}catch(e){}
+    for(const id of ARC_LOBBIES)try{arcWire(arc.ws,'OFFER',id,{lobby:'bye'});}catch(e){}
     for(const c in arc.seen)if(arc.seen[c].open)arcSend('OFFER',c,{gone:1});}
   arcDeskStop();arc.everyone={};arc.listAt=0;arc.connSince=0;const ws=arc.ws;if(ws){ws.onclose=null;try{ws.close();}catch(e){}}arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();}
-function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arc.ws.send(JSON.stringify({type,dst:arcId(code),payload}));}catch(e){}}
+function arcSend(type,code,payload){if(arc.ws&&arc.ready)try{arcWire(arc.ws,type,arcId(code),payload);}catch(e){}}
 function arcIsFriend(code){return arc.friends.some(f=>f.code===code);}
 function arcPing(){const now=Date.now(),kn=arc.friends.map(f=>[f.code,f.name,f.t||0]);
   const near=arc.friends.filter(f=>now-(f.t||0)<14*864e5||(arc.seen[f.code]&&arc.seen[f.code].open)||arc.everyone[f.code])   // recent players only, so it stays light
@@ -336,8 +355,8 @@ arcEvery(()=>{const now=Date.now(),HB='{"type":"HEARTBEAT"}';
    (a laptop asleep) can't hide anyone. If a desk is missing, the first page to notice becomes it. */
 const ARC_LOBBIES=['arcade-lobby-nm2','arcade-lobby-nm2b'];
 arc.everyone={};arc.desks={};arc.listAt=0;
-function arcHello(){if(arc.ws&&arc.ready){const pl=JSON.stringify(Object.assign({lobby:'hi',name:arc.name},arc.me()));
-  for(const id of ARC_LOBBIES)try{arc.ws.send('{"type":"OFFER","dst":"'+id+'","payload":'+pl+'}');}catch(e){}}}
+function arcHello(){if(arc.ws&&arc.ready){const pl=Object.assign({lobby:'hi',name:arc.name},arc.me());
+  for(const id of ARC_LOBBIES)try{arcWire(arc.ws,'OFFER',id,pl);}catch(e){}}}
 function arcFromDesk(m){const p=m.payload||{};
   if(m.type==='EXPIRE'){arcBeDesk(m.src);return;}
   if(p.lobby==='list'&&Array.isArray(p.list)){const now=Date.now();arc.listAt=now;
@@ -356,7 +375,7 @@ function arcKnow(code,name,t){   // remember a player; true if they're new to yo
 function arcBeDesk(id){if(!ARC_LOBBIES.includes(id)||arc.desks[id]||!arc.visible||!arc.ready)return;
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+id+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   const d={ws,who:{},hbAt:0,open:false};arc.desks[id]=d;
-  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}m=arcUnwrap(m);if(!m)return;
     if(m.type==='OPEN'){d.open=true;d.hbAt=Date.now();setTimeout(arcHello,300);}
     else if(m.type==='ID-TAKEN')arcDeskStop(id);   // another page got there first
     else if(m.type==='OFFER'&&m.payload&&(m.payload.lobby==='hi'||m.payload.lobby==='bye')){const now=Date.now(),code=arcCode(m.src);if(!/^[A-Z0-9]{6}$/.test(code))return;
@@ -365,7 +384,7 @@ function arcBeDesk(id){if(!ARC_LOBBIES.includes(id)||arc.desks[id]||!arc.visible
       for(const c in d.who)if(now-d.who[c].t>20000)delete d.who[c];
       const list=Object.values(d.who).map(x=>{const y=Object.assign({},x,{ago:now-x.t});delete y.t;return y;}),payload={lobby:'list',list};if(bye)payload.gone=[code];
       for(const c of fresh||bye?Object.keys(d.who):[code])   // someone new or someone leaving: tell everyone straight away
-        try{ws.send(JSON.stringify({type:'ANSWER',dst:arcId(c),payload}));}catch(err){}}};
+        try{arcWire(ws,'ANSWER',arcId(c),payload);}catch(err){}}};
   ws.onclose=()=>{if(arc.desks[id]===d)arcDeskStop(id);};ws.onerror=()=>{};}
 function arcDeskStop(id){for(const k of id?[id]:Object.keys(arc.desks)){const d=arc.desks[k];if(!d)continue;delete arc.desks[k];d.ws.onclose=null;try{d.ws.close();}catch(e){}}}
 function arcEveryoneList(){   // people online who aren't on your friends list yet
@@ -495,6 +514,11 @@ function render(){
   const quiet=arcConnNote()||(arcSettling()?'':null);   // while connecting: no message at all
   if(!on.length&&quiet!==''){const li=document.createElement('li');li.className='hint';li.style.padding='6px 0 2px';
     li.textContent=quiet||(fl.length?'Nobody else is online right now. They show up here as soon as they open the Arcade or a game.':'Nobody else is here yet. Anyone who opens the Arcade shows up here, and stays on your list.');list.appendChild(li);}
+  {const li=document.createElement('li');li.className='row me';   // you, first on the list
+    li.innerHTML='<span class="pick" style="cursor:default"><span class="av" aria-hidden="true"></span><span class="who"><b></b><small></small></span></span>';
+    const av=li.querySelector('.av');av.textContent=(arc.name||'?')[0];av.style.setProperty('--a',tint(arc.tag));li.style.setProperty('--s',arc.visible?'var(--go)':'var(--off)');
+    li.querySelector('b').textContent=arc.name+' (you)';li.querySelector('small').textContent=arc.visible?'Online in the Arcade':'Hidden: others see you as offline';
+    list.prepend(li);}
   for(const f of on)list.appendChild(personRow(f,true));
   const ol=$('offline');ol.innerHTML='';$('off-wrap').hidden=!off.length;
   const show=showAllOff?off:off.slice(0,3);for(const f of show)ol.appendChild(personRow(f,true));
@@ -542,9 +566,9 @@ let linkT=0;
 $('link').onclick=async e=>{const btn=e.currentTarget,m=$('add-msg');m.classList.remove('err');closePop();
   const r=await arcCopyInvite();if(r==='cancel')return;
   if(r==='copied'||r==='shared'){btn.textContent=r==='copied'?'Link copied ✓':'Link shared ✓';btn.classList.add('done');clearTimeout(linkT);
-    linkT=setTimeout(()=>{btn.textContent='Copy invite link';btn.classList.remove('done');},3000);
-    m.textContent='Invite link '+(r==='copied'?'copied':'shared')+'. Send it to a friend: when they open it, you\'re on each other\'s Players lists.';return;}
-  pop=document.createElement('div');pop.className='pop';pop.innerHTML='<p class="pop-n">Copy this link and send it to a friend. When they open it, you\'re on each other\'s Players lists.</p><input class="linkbox" readonly>';
+    linkT=setTimeout(()=>{btn.textContent='Share Arcade';btn.classList.remove('done');},3000);
+    m.textContent='Link '+(r==='copied'?'copied':'shared')+'. Send it to friends so they can play.';return;}
+  pop=document.createElement('div');pop.className='pop';pop.innerHTML='<p class="pop-n">Copy this link and send it to friends so they can play.</p><input class="linkbox" readonly>';
   const box=pop.querySelector('input');box.value=r;document.body.appendChild(pop);const b=btn.getBoundingClientRect();
   pop.style.top=(b.bottom+6)+'px';pop.style.left=Math.max(8,Math.min(b.right-pop.offsetWidth,innerWidth-pop.offsetWidth-8))+'px';box.focus();box.select();};
 arc.onFriendAdded=name=>{const m=$('add-msg');m.classList.remove('err');m.textContent=name+' added you, so they are now on your friends list too.';};
