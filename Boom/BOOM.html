@@ -347,6 +347,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 .netdlg.docked #net-close{display:none}
 .netfriends li.sub{color:var(--a-cy)!important}
 #a-players[hidden]{display:none}
+#net-msg:empty{display:none}
 </style>
 <!-- ===== end of ARCADE GAME SKIN (style part) ===== -->
 <header class="menubar">
@@ -513,7 +514,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=22;   // goes up by one with every update
+const GAME_BUILD=23;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],S:[0,1],X:[1,2]};   // online guests: what moves, so it glides between snapshots (see the Online Kit)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -552,21 +553,21 @@ if(arcBC)arcBC.onmessage=e=>{const d=e.data||{};if(d.tab===arc.tab)return;
   if(d.claim){if(arc.ws&&arc.busy()){try{arcBC.postMessage({tab:arc.tab,busyFor:d.claim});}catch(err){}return;}
     if(arc.ws)arcStop();arc.blocked=true;arc.onChange();}
   else if(d.busyFor===arc.tab){arc.refused=true;arc.onChange();}};
-function arcStart(){
+function arcStart(retry){   // retry: trying again on its own, so don't take over from another tab
   if(arc.ws||!arc.visible)return;
   if(arc.blocked&&document.hidden)return;   // another tab has it; take over when this tab is looked at
   arc.blocked=false;if(!arc.connSince)arc.connSince=Date.now();
-  if(arcBC)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
+  if(arcBC&&retry!==true)try{arcBC.postMessage({tab:arc.tab,claim:arc.tab});}catch(e){}
   let ws;try{ws=new WebSocket(ARC_BROKER+'?key=peerjs&id='+arcId(arc.tag)+'&token='+arcRand(12).toLowerCase()+'&version=1.5.4');}catch(e){return;}
   arc.ws=ws;
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
     if(ARC_LOBBIES.includes(m.src)){arcFromDesk(m);return;}
     if(m.type==='OPEN'){arc.ready=true;arc.tries=0;arc.connSince=0;arc.openAt=Date.now();arc.refused=false;arc.hbAt=Date.now();arcPing();arcHello();arc.onChange();}
     else if(m.type==='ID-TAKEN'){ws.onclose=null;try{ws.close();}catch(e){}arc.ws=null;   // the page you just left may still be letting go
-      if(!arc.refused&&++arc.tries<10)setTimeout(arcStart,1200);else{arc.blocked=true;arc.tries=0;arc.onChange();}}
+      if(!arc.refused&&++arc.tries<10)setTimeout(()=>arcStart(true),1200);else{arc.blocked=true;arc.tries=0;arc.onChange();}}
     else if(m.type==='EXPIRE'){const c=arcCode(m.src);if(arc.seen[c])arc.seen[c].open=false;arc.onChange();if(arc.onSignal)arc.onSignal(m);}
     else if(!arcSignal(m)&&arc.onSignal)arc.onSignal(m);};
-  ws.onclose=()=>{if(arc.ws===ws)arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible&&!arc.blocked)setTimeout(arcStart,3000);};
+  ws.onclose=()=>{if(arc.ws===ws)arc.ws=null;arc.ready=false;clearInterval(arc.hb);arc.onChange();if(arc.visible&&!arc.blocked)setTimeout(()=>arcStart(true),3000);};
   ws.onerror=()=>{};
 }
 function arcStop(){if(arc.ws&&arc.ready){   // say goodbye, so you show as offline straight away
@@ -677,11 +678,11 @@ function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what 
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
 function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
   arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':'';}
-function arcConnNote(){   // what to show in place of the players list while it isn't in yet; '' once it is
-  if(!arc.visible||arc.blocked||arc.refused)return '';
-  if(!arc.ready)return arc.connSince&&Date.now()-arc.connSince>10000?'Still connecting. Check your internet, or refresh the page.':'Connecting…';
-  if(!arc.listAt&&Date.now()-arc.openAt<5000)return 'Looking for players…';   // never say "nobody's here" before the list has arrived
-  return '';}
+function arcConnNote(){   // a line in place of the players list only if connecting is really stuck (no "Connecting…" flicker)
+  if(!arc.visible||arc.blocked||arc.refused||arc.ready)return '';
+  return arc.connSince&&Date.now()-arc.connSince>20000?'Still connecting. Check your internet, or refresh the page.':'';}
+function arcSettling(){   // still connecting, or the list of who's online is on its way: say nothing yet
+  return arc.visible&&!arc.blocked&&!arc.refused&&(!arc.ready||(!arc.listAt&&Date.now()-arc.openAt<5000));}
 function arcInviteLink(){   // opening this link makes you friends with whoever opens it
   const a=arcArcadeUrl().split('#')[0].split('?')[0];return (/^https?:/.test(a)?a:ARC_HOME+'Arcade.html')+'?add='+arc.tag;}
 async function arcCopyInvite(){   // share sheet on phones, else the clipboard. Returns 'shared', 'copied', 'cancel' or the link to show
@@ -1680,8 +1681,9 @@ function renderNet(){
   const note=t=>{const li=document.createElement('li');li.innerHTML='<span class="st"></span>';li.firstChild.textContent=t;ul.appendChild(li);};
   const canClick=fl.concat(ev).some(f=>friendAction(f));document.getElementById('net-ph').hidden=!canClick;document.getElementById('net-ph').textContent='Click a name to play';
   const all=fl.concat(ev),on=all.filter(f=>f.status!=='offline'),off=all.filter(f=>f.status==='offline');
-  if(!on.length&&net.role!=='guest')note(arcConnNote()||(net.role==='host'?'Nobody else is online right now. Send someone your invite link, and they can join you here.':"Nobody else is online right now. They'll show up here as soon as they open the Arcade or a game."));
-  else if(!canClick&&net.role!=='guest'&&!(net.role==='host'&&anyGuests()))note("Everyone online is in a game right now. You can invite them when they're done.");
+  const quiet=arcConnNote()||(arcSettling()?'':null);   // while connecting: no message at all
+  if(!on.length&&net.role!=='guest'&&quiet!=='')note(quiet||(net.role==='host'?'Nobody else is online right now. Send someone your invite link, and they can join you here.':"Nobody else is online right now. They'll show up here as soon as they open the Arcade or a game."));
+  else if(on.length&&!canClick&&net.role!=='guest'&&!(net.role==='host'&&anyGuests()))note("Everyone online is in a game right now. You can invite them when they're done.");
   const here=on.filter(f=>f.game===GAME_ID),away=on.filter(f=>f.game!==GAME_ID);
   sub('In '+GAME_NAME+' ('+(here.length+1)+')');meRow();here.forEach(row);
   if(away.length){sub('Elsewhere');away.forEach(row);}
