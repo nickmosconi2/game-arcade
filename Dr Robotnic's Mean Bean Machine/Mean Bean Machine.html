@@ -484,7 +484,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
         <tr><td><kbd>Enter</kbd></td><td>Start, and skip through scenes</td></tr>
         <tr><td><kbd>P</kbd> or <kbd>Esc</kbd></td><td>Pause (<kbd>Q</kbd> while paused quits to the menu)</td></tr>
         <tr><td><kbd>O</kbd></td><td>Play online</td></tr>
-        <tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>Sound effects / music on or off</td></tr>
+        <tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>Sound effects / music on or off (the music is the original Mega Drive soundtrack)</td></tr>
         <tr><td><kbd>Alt</kbd>+<kbd>Enter</kbd></td><td>Full screen</td></tr>
       </table>
       <p>Game controllers work too: the stick or d-pad moves and drops, A turns clockwise, B anticlockwise, Start pauses. On a phone, use the buttons under the game.</p>
@@ -522,7 +522,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=14;   // goes up by one with every update
+const GAME_BUILD=16;   // goes up by one with every update
 const GAME_ID='meanbean',GAME_NAME="Dr. Robotnik's Mean Bean Machine";
 const SNAP_SMOOTH={O:[4],P:[1]};   // online guests: attack orbs and pop bursts glide between snapshots (the falling pair glides by itself)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -884,7 +884,7 @@ function checkPops(b){const groups=findGroups(b.g);
   // refugee beans next to a popping group go too
   for(const i of [...cells]){const r=Math.floor(i/COLS),c=i%COLS;
     for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){const r2=r+dr,c2=c+dc;if(r2<HIDDEN||r2>=ROWS||c2<0||c2>=COLS)continue;if(b.g[idx(r2,c2)]===GARB)cells.add(idx(r2,c2));}}
-  b.popCells=[...cells].map(i=>[i,b.g[i]]);b.ph='pop';b.popT=0;sfx('pop'+Math.min(b.chain,7));
+  b.popCells=[...cells].map(i=>[i,b.g[i]]);b.ph='pop';b.popT=0;sfx('pop'+Math.min(b.chain,7));if(b.chain>=2)sfx(b.side?'yeehaw':'yippee');
   // refugee beans sent: a lone group of 4 sends 1, a 2-chain 1 row (6), a 3-chain 3 rows (18), and from there the total
   // triples with every link (54, 162, ...); every bean past 4 in a group, and every extra group in the same link, adds one more
   const chainTotal=n=>n<=0?0:n===1?1:6*Math.pow(3,n-2);
@@ -1003,23 +1003,23 @@ function newMatch(fallF,cpuStage,colors){seqRng=mkRng(vsSeed);pairSeq=[];gRnd=mk
 function aiFor(s){const a=Object.assign({},AI_STAGE[s]),m=MD();a.think=Math.round(a.think*m.ai);a.move=Math.max(2,Math.round(a.move*m.ai));a.noise*=m.noise;
   if(playMode==='easy')a.drop*=0.6;return a;}
 function startScenario(fromStage){ensureAudio();playMode=mode;gmode='scen';stage=fromStage||0;totalScore=0;paused=false;toLineup();}
-function toLineup(){state='lineup';lineupT=0;sfx('select');musicPlay('lineup');}
-function toCut(){state='cut';cutLine=0;cutChars=0;cutHold=0;stT=0;musicPlay('cut');}
+function toLineup(){state='lineup';lineupT=0;sfx('select');}
+function toCut(){state='cut';cutLine=0;cutChars=0;cutHold=0;stT=0;}
 function startStage(){vsSeed=(Date.now()&0xffff)+stage*977;const f=FALL_STAGE[stage];newMatch([f,f],stage,MD().colors);
-  boards[0].score=totalScore;state='play';stT=0;mugAnim='i';musicPlay(stage===12?'boss':'play');}
+  boards[0].score=totalScore;state='play';stT=0;mugAnim='i';}
 function onBoardLost(b){sfx('lose');for(const o of boards)if(o!==b&&o.ph!=='lose'){o.ph='idle';}
-  if(gmode==='scen'){if(b.side===1){state='result';resultT=0;winner=0;bonus=Math.floor(19008/Math.max(1,Math.round(playT/60)));mugAnim='d';musicStop();sfx('win');}
-    else{state='lost';resultT=0;winner=1;mugAnim='w';musicStop();}}
-  else if(gmode==='vs'){winner=1-b.side;vsWins[winner]++;state='vsover';resultT=0;musicStop();sfx('win');}
-  else if(gmode==='ex'){state='exover';resultT=0;musicStop();if(boards[0].score>exHi){exHi=boards[0].score;save('exhi',exHi);}}}
-function startVsSelect(){ensureAudio();playMode=mode;gmode='vs';state='vssel';vsReady=[false,false];boards=[];paused=false;musicPlay('lineup');}
-function startVs(){vsSeed=(Date.now()&0xffff)|1;newMatch([FALL_LEVEL[vsLevel[0]],FALL_LEVEL[vsLevel[1]]],-1,MD().colors);state='play';stT=0;musicPlay('play');}
+  if(gmode==='scen'){if(b.side===1){state='result';resultT=0;winner=0;bonus=Math.floor(19008/Math.max(1,Math.round(playT/60)));mugAnim='d';sfx('win');}
+    else{state='lost';resultT=0;winner=1;mugAnim='w';}}
+  else if(gmode==='vs'){winner=1-b.side;vsWins[winner]++;state='vsover';resultT=0;sfx('win');}
+  else if(gmode==='ex'){state='exover';resultT=0;if(boards[0].score>exHi){exHi=boards[0].score;save('exhi',exHi);}}}
+function startVsSelect(){ensureAudio();playMode=mode;gmode='vs';state='vssel';vsReady=[false,false];boards=[];paused=false;}
+function startVs(){vsSeed=(Date.now()&0xffff)|1;newMatch([FALL_LEVEL[vsLevel[0]],FALL_LEVEL[vsLevel[1]]],-1,MD().colors);state='play';stT=0;}
 function startExercise(){ensureAudio();playMode=mode;gmode='ex';exLevel=1;exPieces=0;vsSeed=(Date.now()&0xffff)|1;seqRng=mkRng(vsSeed);pairSeq=[];gRnd=mkRng(vsSeed+5);orbs=[];parts=[];
   boards=[newBoard(0,{fallF:24,colors:MD().colors})];boards[0].queue=[nextPair(boards[0]),nextPair(boards[0])];boards[0].ph='spawnwait';boards[0].wait=30;
-  state='play';stT=0;paused=false;playT=0;musicPlay('play');}
+  state='play';stT=0;paused=false;playT=0;}
 function startGame(n){if(n>=2||net.role==='host')startVsSelect();else startScenario(0);}   // the online kit calls this
-function toTitle(){state='title';boards=[];orbs=[];parts=[];paused=false;clearHeld();musicStop();stT=0;}
-function toMenu(){state='menu';boards=[];paused=false;stT=0;musicPlay('menu');}
+function toTitle(){state='title';boards=[];orbs=[];parts=[];paused=false;clearHeld();stT=0;}
+function toMenu(){state='menu';boards=[];paused=false;stT=0;}
 
 function step(){if(net.role==='guest')return;   // a guest only shows what the host sends
   frame++;stT++;if(titleMsgT>0)titleMsgT--;
@@ -1039,11 +1039,11 @@ function step(){if(net.role==='guest')return;   // a guest only shows what the h
     return;}
   if(state==='result'){resultT++;for(const b of boards)stepBoard(b,NO_INPUT);
     if(resultT===90){totalScore=boards[0].score+bonus;boards[0].score=totalScore;sfx('bonus');}
-    if(resultT>200||(resultT>100&&(input[0].startP||input[0].rotRP))){
-      if(stage>=12){state='ending';endT=0;musicPlay('ending');recordHi(totalScore);}
+    if(resultT>(stage>=12?360:200)||(resultT>100&&(input[0].startP||input[0].rotRP))){
+      if(stage>=12){state='ending';endT=0;recordHi(totalScore);}
       else{stage++;if(stage>furthest){furthest=stage;save('furthest',furthest);}toLineup();}}return;}
-  if(state==='lost'){resultT++;for(const b of boards)stepBoard(b,NO_INPUT);if(resultT>110){state='over';overCount=9;overT=0;musicPlay('over');}return;}
-  if(state==='over'){overT++;if(overT%60===0){overCount--;sfx('tick');if(overCount<0){recordHi(totalScore);state='hiscore';stT=0;musicStop();return;}}
+  if(state==='lost'){resultT++;for(const b of boards)stepBoard(b,NO_INPUT);if(resultT>110){state='over';overCount=9;overT=0;}return;}
+  if(state==='over'){overT++;if(overT%60===0){overCount--;sfx('tick');if(overCount<0){recordHi(totalScore);state='hiscore';stT=0;return;}}
     if(overT>20&&(input[0].startP||input[0].rotRP)){totalScore=0;sfx('select');toLineup();}return;}
   if(state==='ending'){endT++;if(endT>60*14||(endT>120&&input[0].startP)){state='hiscore';stT=0;}return;}
   if(state==='hiscore'){if(stT>40&&(input[0].startP||input[0].rotRP)||stT>60*8)toTitle();return;}
@@ -1211,10 +1211,10 @@ function draw(){visTick();ctx.setTransform(SC,0,0,SC,0,0);ctx.imageSmoothingEnab
   if(paused){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);box('d',96,88,128,44);txtC('PAUSED',160,100,'W');txtC('P TO RESUME',160,118,'S');}
   if(net.role==='guest'&&!(net.ch&&net.ch.readyState==='open')&&state!=='title'){}}
 
-/* ================= sound (synthesised) ================= */
+/* ================= sound: synthesised effects, recorded music ================= */
 let actx=null,master=null,sfxBus=null,musBus=null;
 function ensureAudio(){if(actx)return;try{actx=new(window.AudioContext||window.webkitAudioContext)();master=actx.createGain();master.gain.value=0.5;master.connect(actx.destination);
-  sfxBus=actx.createGain();sfxBus.connect(master);musBus=actx.createGain();musBus.gain.value=0.22;musBus.connect(master);}catch(e){actx=null;}}
+  sfxBus=actx.createGain();sfxBus.connect(master);musBus=actx.createGain();musBus.gain.value=1;musBus.connect(master);voiceLoad();}catch(e){actx=null;}}
 function tone(f,d,type,vol,slide,bus,delay){if(!actx)return;const t=actx.currentTime+(delay||0),o=actx.createOscillator(),g=actx.createGain();o.type=type||'square';o.frequency.setValueAtTime(f,t);
   if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(30,slide),t+d);g.gain.setValueAtTime(vol||0.2,t);g.gain.exponentialRampToValueAtTime(0.0008,t+d);o.connect(g);g.connect(bus||sfxBus);o.start(t);o.stop(t+d+0.02);}
 function noise(d,vol,freq,delay){if(!actx)return;const t=actx.currentTime+(delay||0),n=Math.max(1,actx.sampleRate*d|0),b=actx.createBuffer(1,n,actx.sampleRate),ch=b.getChannelData(0);for(let i=0;i<n;i++)ch[i]=(Math.random()*2-1)*(1-i/n);
@@ -1224,15 +1224,96 @@ const SFX={move:()=>tone(520,0.03,'square',0.05),rotate:()=>tone(700,0.05,'trian
   garbage:()=>{noise(0.25,0.18,600);tone(110,0.25,'sawtooth',0.08,60);},select:()=>seq([660,880,1320],0.05,'square',0.09),tick:()=>tone(900,0.04,'square',0.06),type:()=>tone(1200,0.015,'square',0.03),
   lose:()=>seq([392,330,262,196],0.14,'triangle',0.16),win:()=>seq([523,659,784,1047,784,1047],0.09,'square',0.1),bonus:()=>seq([784,988,1175,1568],0.06,'triangle',0.14)};
 for(let i=1;i<=7;i++)SFX['pop'+i]=()=>{const f=440*Math.pow(2,(i-1)*2/12);tone(f,0.12,'square',0.12,f*1.5);tone(f*1.5,0.16,'triangle',0.1,f*2,null,0.05);noise(0.06,0.12,3000);};
+// voices: Has Bean (left well) shouts "Yippee!" and the right-hand player "Yeehaw!" on every link of a chain after the first
+const VOICE={yippee:'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',yeehaw:'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sTsVZ6/b/QskWLA+4NxBa6E97Hm4MU6uVvyuVwuk8wFq1Kj2EdcrJDphMFGKEoqVFEAOFYGOCp1p8i0ElC+idElaKKfslf/7MsRzgAdoP2OGGHAA1YtvdJMNjv1xV5aBrgABBAAAloaNpUr/xehsO+ES/wbIXHPQz/gZFEChoxbAEDmJRejxBouUVqL4yU6/cgpPDOkE1r/FbEFIsQImkVf/NyeQMi6suLX6v5qikkodKSSH//6BmMqP4giM9UxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+zLEfwEHkDtXJLzHAP4HafKesABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//syxIUAC5UJLrmKAAAAADSDgAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ=='};let voiceBuf={};
+function voiceLoad(){if(!actx)return;for(const k in VOICE)if(!voiceBuf[k]){voiceBuf[k]=1;try{const s=atob(VOICE[k]),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);
+  actx.decodeAudioData(a.buffer,b=>{voiceBuf[k]=b;},()=>{});}catch(e){}}}
+function voice(k){const b=voiceBuf[k];if(!(b instanceof AudioBuffer))return;const s=actx.createBufferSource(),g=actx.createGain();s.buffer=b;g.gain.value=0.9;s.connect(g);g.connect(sfxBus);s.start();}
+SFX.yippee=()=>voice('yippee');SFX.yeehaw=()=>voice('yeehaw');
 let evLog=[],evId=0;
 function sfx(n){evLog.push([++evId,n]);if(evLog.length>40)evLog.shift();if(!muted&&actx&&SFX[n])try{SFX[n]();}catch(e){}}
-// little background tunes, one per scene
-const TUNES={menu:[[0,4,7,12],262],lineup:[[0,3,7,10],220],cut:[[0,5,9,12],247],play:[[0,4,7,9,12,9,7,4],294],boss:[[0,3,6,10,12,10,6,3],196],over:[[0,3,7,3],175],ending:[[0,4,7,11,12,11,7,4],330]};
-let musT=null,musStep=0,musKey='';
-function musicPlay(k){if(!actx||muted||!musicOn||!TUNES[k]){musicStop();musKey=k;return;}if(musT&&musKey===k)return;musicStop();musKey=k;const [sc,root]=TUNES[k];
-  musT=setInterval(()=>{if(!actx)return;const s=musStep++;const n=sc[s%sc.length];if(s%2===0)tone(root/2*Math.pow(2,sc[(s>>2)%sc.length]/12),0.22,'triangle',0.16,null,musBus);
-    tone(root*2*Math.pow(2,n/12),0.1,'square',0.04,null,musBus);},170);}
-function musicStop(){if(musT)clearInterval(musT);musT=null;}
+// music: the recorded soundtrack in Music/ (mono MP3s cut to intro + one loop). Each scene picks a track
+// (musicFor), loop points make the loop seamless, the next likely tracks load ahead, and changes crossfade.
+// Served over http(s) it plays through Web Audio (sample-exact loops); opened as a local file the browser
+// blocks fetch(), so it falls back to <audio> elements that jump back at the loop point.
+const MUS_DIR='Music/';
+const MUS={title:{f:'title.mp3',g:0.54,ls:25.7258,le:53.92283},menu:{f:'menu.mp3',g:0.94,ls:31.90766,le:104.71467},intro1:{f:'intro1.mp3',g:0.63,ls:3.8658,le:11.72433},stage1:{f:'stage1.mp3',g:0.88,ls:22.62231,le:53.36302},intro2:{f:'intro2.mp3',g:1.00,ls:4.13621,le:8.06551},stage2:{f:'stage2.mp3',g:0.87,ls:12.81574,le:39.16492},intro3:{f:'intro3.mp3',g:0.59,ls:4.73862,le:12.82832},stage3:{f:'stage3.mp3',g:0.82,ls:22.76313,le:53.50383},intro4:{f:'intro4.mp3',g:0.70,ls:0.25467,le:9.03776},stage4:{f:'stage4.mp3',g:0.75,ls:0.4024,le:47.32236},danger4:{f:'danger4.mp3',g:0.89,ls:0.16109,le:39.26113},beaten:{f:'beaten.mp3',g:0.65},explode:{f:'explode.mp3',g:0.21},continue:{f:'continue.mp3',g:0.79,ls:6.622,le:19.33433},ending:{f:'ending.mp3',g:0.69,ls:37.81871,le:106.98526},vs:{f:'vs.mp3',g:0.65,ls:26.89372,le:79.7644},danger:{f:'danger.mp3',g:0.73,ls:0.48608,le:48.15728},clear:{f:'clear.mp3',g:0.61}};
+const MUS_VOL=0.9;
+let musKey='',musVoices=[],musBuf={},musLoad={},musFail={},musPos={},musWeb=location.protocol!=='file:',musReady=false,musState='',musDanger=[false,false],musFadeIn=0.05;
+function musUnlock(){ensureAudio();if(actx&&actx.state==='suspended')actx.resume();musReady=true;}
+addEventListener('pointerdown',musUnlock,true);addEventListener('keydown',musUnlock,true);
+// a hidden tab goes quiet at once (drawing, and so musicTick, stops there); the track picks up again on return
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)return;for(const v of musVoices){if(v.to>0)musRelease(v,0);musKill(v);}musVoices=[];musKey='';});
+function musFetch(k){if(!MUS[k]||musBuf[k]||musLoad[k]||musFail[k]>2)return;const url=MUS_DIR+MUS[k].f;
+  if(!musWeb){const el=new Audio(url);el.preload='auto';musBuf[k]=el;return;}
+  if(!actx)return;
+  musLoad[k]=fetch(url).then(r=>{if(!r.ok)throw 0;return r.arrayBuffer();}).then(a=>new Promise((ok,no)=>actx.decodeAudioData(a,ok,no)))
+    .then(b=>{musBuf[k]=b;musLoad[k]=null;})
+    .catch(()=>{musLoad[k]=null;if(location.protocol==='file:'||!musFail.web){musWeb=false;musFail.web=1;musBuf={};}else musFail[k]=(musFail[k]||0)+1;});}
+const musGrp=s=>s<4?1:s<8?2:s<12?3:4;
+// where a looping track is now (seconds), so it can pick up again after a pause or a danger spell
+function musWhere(v){const m=MUS[v.k];let t=v.el?v.el.currentTime:actx.currentTime-v.t0+v.off;
+  if(m.le&&t>=m.le)t=m.ls+(t-m.ls)%(m.le-m.ls);return t;}
+function musStart(k){const m=MUS[k],b=musBuf[k];if(!m||!b){musFetch(k);return;}let off=musPos[k]||0;delete musPos[k];
+  const v={k,vol:0,to:1,fade:musFadeIn};
+  if(b instanceof AudioBuffer){if(m.le&&off>=m.le)off=m.ls;v.src=actx.createBufferSource();v.src.buffer=b;
+    if(m.le){v.src.loop=true;v.src.loopStart=m.ls;v.src.loopEnd=m.le;}
+    v.g=actx.createGain();v.g.gain.value=0;v.src.connect(v.g);v.g.connect(musBus);v.t0=actx.currentTime;v.off=off;v.src.start(0,off);
+    v.src.onended=()=>{v.done=true;};}
+  else{v.el=b;musBuf[k]=null;musFetch(k);try{b.currentTime=off;}catch(e){}b.volume=0;b.onended=()=>{v.done=true;};
+    const p=b.play();if(p)p.catch(()=>{v.done=true;});}
+  musVoices.push(v);}
+function musRelease(v,fade){if(MUS[v.k].le&&!v.done)musPos[v.k]=musWhere(v);v.to=0;v.fade=fade;}
+function musKill(v){try{if(v.src){v.src.onended=null;v.src.stop();v.g.disconnect();}else v.el.pause();}catch(e){}}
+// danger: fewer than MUS_DANGER_EMPTY of the 72 cells in the well (6 x 12) are still empty, wherever the beans are.
+// The well has to stay that full for MUS_DANGER_IN ms before the danger music starts, and stay clear of it for
+// MUS_DANGER_OUT ms before the stage music comes back, so a quick pop or a passing drop doesn't swap the music
+const MUS_DANGER_EMPTY=24,MUS_DANGER_IN=1500,MUS_DANGER_OUT=4000;   // 24 cells = 4 rows' worth
+function musEmpty(b){if(!b||!b.g)return 99;let n=0;for(let r=HIDDEN;r<ROWS;r++)for(let c=0;c<COLS;c++)if(b.g[idx(r,c)]===EMPTY)n++;return n;}
+let musDangerT=[0,0];   // when the well last crossed the line the other way
+function musDangerAt(i){const full=musEmpty(boards[i])<MUS_DANGER_EMPTY,now=performance.now();
+  if(full===musDanger[i])musDangerT[i]=now;
+  else if(now-musDangerT[i]>(full?MUS_DANGER_IN:MUS_DANGER_OUT))musDanger[i]=full;
+  return musDanger[i];}
+function musicFor(){const g=musGrp(stage);
+  switch(state){
+    case 'title':return 'title';
+    case 'menu':case 'scenmenu':case 'vssel':return 'menu';
+    case 'lineup':case 'cut':return 'intro'+g;
+    case 'play':{if(paused)return '';const you=musDangerAt(0),them=boards.length>1&&musDangerAt(1);
+      if(gmode==='scen')return you?'danger':g===4&&them?'danger4':'stage'+g;   // stage 13: Robotnik's pile high
+      if(gmode==='vs')return you||them?'danger':'vs';
+      return you?'danger':'vs';}                                                   // Exercise
+    case 'result':return stage>=12?'beaten':'clear';
+    case 'vsover':return 'clear';
+    case 'over':return 'continue';
+    case 'ending':return endT<300?'explode':'ending';
+    case 'hiscore':return musKey==='ending'?'ending':'';
+    default:return '';}}
+// what to load ahead in each scene
+function musNext(k){const g=musGrp(stage);
+  if(k==='title')return ['menu'];if(k==='menu')return ['intro1','vs'];
+  if(k.startsWith('intro'))return ['stage'+g,g===4?'danger4':'danger','danger',g===4?'beaten':'clear','continue'];
+  if(k==='vs')return ['danger','clear'];if(k==='beaten')return ['explode','ending'];
+  if(k==='clear')return ['intro'+musGrp(stage+1),'menu'];if(k==='continue')return ['intro'+g];return [];}
+function musicTick(){if(!musReady||!actx)return;
+  if(state!==musState){musState=state;musPos={};musDanger=[false,false];musDangerT=[performance.now(),performance.now()];}
+  const want=musicOn&&!document.hidden?musicFor():'';
+  if(want!==musKey){const quick=paused||!musicOn||document.hidden;
+    musFadeIn=musVoices.some(v=>v.to>0&&!v.done)&&!quick?0.6:0.05;
+    for(const v of musVoices)if(v.to>0)musRelease(v,quick?0.12:0.6);
+    const back=musVoices.find(v=>v.k===want&&!v.done);if(back){back.to=1;back.fade=0.3;delete musPos[want];}   // switched straight back
+    musKey=want;if(want)for(const k of [want,...musNext(want)])musFetch(k);}
+  if(musKey&&!musVoices.some(v=>v.k===musKey))musStart(musKey);
+  const now=performance.now()/1000;
+  for(const v of musVoices){const m=MUS[v.k],dt=Math.min(0.1,now-(v.last||now));v.last=now;
+    const st=v.fade>0?dt/v.fade:1;v.vol=v.to>v.vol?Math.min(v.to,v.vol+st):Math.max(v.to,v.vol-st);
+    const vol=v.vol*m.g*MUS_VOL;
+    if(v.g)v.g.gain.setTargetAtTime(vol,actx.currentTime,0.015);
+    else{v.el.volume=Math.max(0,Math.min(1,vol*0.5));if(m.le&&v.el.currentTime>=m.le)v.el.currentTime-=m.le-m.ls;}
+    if(v.to===0&&v.vol<=0)v.dead=true;}
+  for(const v of musVoices)if(v.dead)musKill(v);
+  musVoices=musVoices.filter(v=>!v.dead);}
 
 /* ---------- online: what the game tells the online kit ---------- */
 function gameStatus(){return state==='title'||state==='menu'||state==='scenmenu'||state==='hiscore'||state==='boot'?'idle':(net.role?'playing':'solo');}
@@ -1250,8 +1331,7 @@ let lastEv=0;
 function applySnap(s){state=s.st;gmode=s.gm;stage=s.sg;paused=!!s.pa;frame=s.fr;stT=s.t;resultT=s.rt;winner=s.w;vsLevel=s.vl;vsReady=s.vr.map(v=>!!v);vsWins=s.vw;mugAnim=s.mu;playT=s.pl;bonus=s.bo;
   boards=s.B.map((o,i)=>unpackBoard(o,i));orbs=s.O.map(a=>({x0:a[0],y0:a[1],x1:a[2],y1:a[3],t:a[4],T:a[5],c:a[6]}));
   parts=s.P.map(a=>{const cells=[];for(let i=0;i<a[2].length;i+=2)cells.push([a[2][i],a[2][i+1]]);return {b:boards[a[0]],t:a[1],cells};});
-  for(const [id,n] of s.ev||[])if(id>lastEv){lastEv=id;if(!muted&&actx&&SFX[n])try{SFX[n]();}catch(e){}}
-  const want=state==='play'?(gmode==='scen'&&stage===12?'boss':'play'):state==='vssel'?'lineup':'';if(want)musicPlay(want);else musicStop();}
+  for(const [id,n] of s.ev||[])if(id>lastEv){lastEv=id;if(!muted&&actx&&SFX[n])try{SFX[n]();}catch(e){}}}
 
 /* ===== ARCADE ONLINE PLAY v2 — part 2 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
    Paste unchanged into every online game, just below part 1; every copy must stay identical.
@@ -1599,7 +1679,7 @@ function advance(now){acc+=Math.min(250,now-last);last=now;if(testFreeze){acc=0;
   else{let stepped=false;while(acc>=1000/60){step();clearPresses();acc-=1000/60;stepped=true;}
     if(stepped&&net.role==='host'&&anyGuests())sendSnap();}}
 function clearPresses(){for(const k of input)for(const a of ACTIONS)k[a+'P']=false;}
-function tick(now){advance(now);draw();requestAnimationFrame(tick);}
+function tick(now){advance(now);draw();musicTick();requestAnimationFrame(tick);}
 loadAssets(()=>{state='title';stT=0;});
 requestAnimationFrame(tick);
 netKeepRunning(advance);   // hosted games keep running while the tab is hidden
@@ -1631,9 +1711,9 @@ function who(slot){if(net.role==='host')return 0;return gmode==='vs'&&(state==='
 function press(i,a){const k=input[i];if(!k[a]){k[a]=true;k[a+'P']=true;}}
 function release(i,a){input[i][a]=false;}
 function togglePause(){if(state!=='play'||net.role==='guest')return;paused=!paused;clearHeld();updatePauseLabel();}
-function updatePauseLabel(){document.getElementById('cmd-pause').firstChild.nodeValue=paused?'Resume':'Pause';if(paused)musicStop();else if(state==='play')musicPlay(gmode==='scen'&&stage===12?'boss':'play');}
-function setMusic(m){musicOn=m;save('music',m);document.getElementById('music-chk').textContent=m?'✓':'';if(m&&musKey)musicPlay(musKey);else musicStop();}
-function setMute(m){muted=m;save('muted',m);document.getElementById('mute-chk').textContent=m?'':'✓';if(m)musicStop();else if(musKey)musicPlay(musKey);}
+function updatePauseLabel(){document.getElementById('cmd-pause').firstChild.nodeValue=paused?'Resume':'Pause';}
+function setMusic(m){musicOn=m;save('music',m);document.getElementById('music-chk').textContent=m?'✓':'';}
+function setMute(m){muted=m;save('muted',m);document.getElementById('mute-chk').textContent=m?'':'✓';}
 setMute(muted);setMusic(musicOn);
 const guestLive=()=>net.role==='guest'&&net.ch&&net.ch.readyState==='open';
 window.addEventListener('keydown',e=>{
@@ -1756,7 +1836,7 @@ if(ARC_QS.get('test'))window.__mb={get s(){return {state,gmode,stage,boards,paus
   startScenario,startVsSelect,startVs,startExercise,startStage,toMenu,toTitle,setStage:v=>{stage=v;},setCaptions:v=>{captions=v;},
   findGroups,simResolve,scoreStep,newBoard,settle,checkPops,lockPiece,canPlace,spawn,packSnap,applySnap,aiFor,
   setGrid:(bi,rows)=>{const b=boards[bi];b.g.fill(EMPTY);rows.forEach((row,ri)=>{const r=ROWS-rows.length+ri;for(let c=0;c<COLS;c++){const ch=row[c];b.g[idx(r,c)]=ch==='.'?EMPTY:ch==='G'?GARB:+ch;}});},
-  T,ROWS,COLS,idx,draw,VIS};
+  T,ROWS,COLS,idx,draw,VIS,ev:c=>eval(c)};   // ev: tests run code inside the game
 
 })();
 </script>
