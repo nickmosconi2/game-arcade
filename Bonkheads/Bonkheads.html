@@ -561,7 +561,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=12;   // goes up by one with every update
+const GAME_BUILD=13;   // goes up by one with every update
 const GAME_ID='bonkheads',GAME_NAME='Bonkheads';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],B:[1,2],G:[1,2],M:[0,1],F:[1,2],X:[1,2],BM:[0,1]};   // online guests: what moves, so it glides between snapshots (see the Online Kit)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -1034,7 +1034,10 @@ function bumpBlock(p,c,r){c=((c%COLS)+COLS)%COLS;const t=tileAt(c,r);if(!SOLID(t
   cs.bump=P.bump;
   const x0=c*TW-12,x1=(c+1)*TW+12,top=r*TH;
   for(const e of pests)if(Math.abs(e.y-top)<1.5&&wrapIn(e.x,x0,x1))bonkPest(e,p,(c+0.5)*TW);
-  for(const g of gems)if(Math.abs(g.y-top)<1.5&&wrapIn(g.x,x0,x1)){g.vy=-4;g.ground=false;}
+  for(const g of gems)if(!g.dead&&Math.abs(g.y-top)<1.5&&wrapIn(g.x,x0,x1)){
+    if(p&&!p.dead&&!p.out&&gemCramped(g)){takeGem(p,g);continue;}   // stuck in a gap too low to walk into: the bonk hands it to you
+    g.bonks=(g.bonks||0)+1;if(g.bonks>=3){g.dead=true;shatter(g.x,g.y-8);sfx('clunk');continue;}   // the third hit smashes it
+    g.vy=-4;g.ground=false;}
   if(boss&&!boss.dead&&boss.onGround&&Math.abs(boss.y-top)<1.5&&wrapIn(boss.x,x0-BOSSES[boss.kind].hw,x1+BOSSES[boss.kind].hw))hitBoss(p);
   if(battle)for(const q of players)if(q!==p&&!q.dead&&!q.out&&!q.climb&&Math.abs(q.y-top)<1.5&&wrapIn(q.x,x0,x1))stunTroll(q,p);
   return true;}
@@ -1100,7 +1103,8 @@ function updatePest(e){e.t++;e.anim++;const PE=PESTS[e.kind];const drowsy=drowsy
           e.st='hover';e.t=0;e.vy=-(3.4+rnd()*1.2)*a*jmul();e.bounce=0;e.hops=1;break;}}}
     const r=moveBody(e,hw,24,e.dir*sp,0);if(r.side)e.dir*=-1;
     if(!onGroundAt(e.x,e.y,hw-6)){e.st='fall';e.vy=0;break;}
-    if(g==='J'||g==='K'){e.st='fall';e.vy=-(g==='K'?P.superV:P.springV)*0.8;sfx('spring');break;}
+    if(g!=='J'&&g!=='K')e.sprung=false;
+    else if(!e.sprung){e.sprung=true;e.st='fall';e.vy=-(g==='K'?P.superV:P.springV)*0.8;sfx('spring');break;}   // only when it walks onto one, so it can't get stuck bouncing
     if(e.bt>0)e.bt--;
     if((e.kind==='raptor'||e.kind==='demon')&&e.bt<=0){e.bt=(e.kind==='demon'?100:140)+((rnd()*120)|0);if(rnd()<0.6){e.st='fall';e.vy=-P.jumpV*jmul()*(e.kind==='demon'?0.95:0.9)*(1+Math.min(4,e.angry)*0.06);e.jx=e.speed*1.6*(1+Math.min(4,e.angry)*0.15);}}
     if(e.kind==='dillo'&&e.bt<=0){e.bt=240;e.st='roll';e.t=0;}
@@ -1164,10 +1168,18 @@ const GEM_KINDS=['Adrenaline','Tranquilium','Densidium','Moolamite','Resurrectit
 // (the glass mystery crystals don't come out of blocks: they drop in from the top now and then)
 function pickGem(){const r=rnd();if(r<0.40)return 'Moolamite';if(r<0.55)return 'Adrenaline';if(r<0.68)return 'Tranquilium';if(r<0.78)return 'Densidium';
   if(r<0.82)return 'Blastidian';if(r<0.94)return 'Kryptoleum';return 'Resurrectite';}
+// a gem sitting where a troll can't stand (less than a troll's height of space above it)
+function gemCramped(g){const yb=Math.round(g.y/TH);if(yb<3)return false;
+  for(const x of [g.x-10,g.x+10]){const c=Math.floor(x/TW);for(let r=yb-3;r<yb;r++)if(SOLID(tileAt(c,r)))return true;}return false;}
 function spawnGem(c,r,kind){gems.push({kind,x:(c+0.5)*TW,y:r*TH,vy:-5,ground:false,t:0});sfx('gem');}
 function updateGem(g){g.t++;
   if(g.enter){g.x+=g.vx;if((g.vx>0&&g.x>=12)||(g.vx<0&&g.x<=W-12))g.enter=false;return;}   // sliding in from off the screen edge
-  if(g.vx){const r=moveBody(g,10,14,g.vx,0);if(r.side)g.vx=-g.vx;}   // a mystery crystal slides along and drops off platform edges
+  if(g.vx){const r=moveBody(g,10,14,g.vx,0);if(r.side){g.vx=-g.vx;if(g.out&&++g.turns>3){g.vx=0;g.out=false;}}}   // a mystery crystal slides along and drops off platform edges
+  // a gem that landed in a gap too low for a troll slides out to where it can be reached
+  if(g.ground&&g.kind!=='Question'){if(!g.vx&&!g.outDone&&gemCramped(g)){g.out=true;g.outDone=true;g.turns=0;
+      const open=d=>{for(let k=1;k<=6;k++){const t={x:g.x+d*k*TW,y:g.y};if(!gemCramped(t))return k;}return 99;};
+      g.vx=(open(-1)<=open(1)?-1:1)*1.2;}
+    else if(g.out&&!gemCramped(g)){g.vx=0;g.out=false;}}
   if(!g.ground){g.vy=Math.min(8,g.vy+grav());const res=moveBody(g,10,14,0,g.vy);if(res.down){g.ground=true;g.vy=0;}}
   else if(!onGroundAt(g.x,g.y,8))g.ground=false;
   if(g.t>(g.life||60*12))g.dead=true;}
@@ -1678,6 +1690,9 @@ function drawTroll(p){if(p.out){if(p.ghost)drawGhost(p);return;}if(p.inv>0&&!p.d
   dF(n,p.x,p.y+lift);
   if(p.powerT>0&&(frame>>2)%2){ctx.globalCompositeOperation='lighter';dF(n,p.x,p.y+lift,0.35);ctx.globalCompositeOperation='source-over';}
   if(p.speedT>0&&(frame>>3)%2){dF(n,p.x-p.dir*8,p.y+lift,0.25);}
+  if(p.powerT>0&&!p.dead){const full=60*(battle?6:12),f=Math.max(0,Math.min(1,p.powerT/full)),bx=Math.round(p.x-16),by=Math.round(p.y-54+lift);   // shield time left
+    ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(bx-1,by-1,34,6);ctx.fillStyle=p.powerT<120&&(frame>>2)%2?'#ffffff':'#b98aff';ctx.fillRect(bx,by,Math.round(32*f),4);
+    txt(String(Math.ceil(p.powerT/60)),p.x+24,by+5,11,'#e6d6ff','left');}
   // wrap: draw again on the other side when near an edge
   if(p.x<24||p.x>W-24){const ox=p.x<24?W:-W;dF(n,p.x+ox,p.y+lift);}}
 function drawBoss(){const b=boss;if(!b)return;const LR=b.dir<0?'L':'R';let n;

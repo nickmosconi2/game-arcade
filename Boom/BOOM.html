@@ -515,7 +515,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=25;   // goes up by one with every update
+const GAME_BUILD=26;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],S:[0,1],X:[1,2]};   // online guests: what moves, so it glides between snapshots (see the Online Kit)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -757,11 +757,11 @@ const EN={
   grunt:  {name:'Green Cap', tpl:'soldier',pal:{a:'#5aa04a',b:'#3a6a2a',c:'#e0a060'},ai:'random', spd:1,  shot:'pellet',cd:150,pts:100,desc:'A ginger-bearded tough in a green cap. Wanders about and shoots when it sees you.'},
   imp:    {name:'Leaf Tiki',  tpl:'imp',    pal:{a:'#3a9a3a',b:'#1a4a8a',c:'#ff9a2a'},ai:'forward',spd:1,  shot:'orb',  cd:150,pts:250,desc:'A walking tiki with a crown of leaves. Marches until it hits a wall and spits purple orbs.'},
   sarge:  {name:'Gunman',     tpl:'soldier',pal:{a:'#e0a0a0',b:'#8a8a8a',c:'#ffb04a'},ai:'random', spd:1,  shot:'burst', cd:150,pts:200,burst:3,desc:'A grey-haired army man with a machine gun. Fires bursts of three down any row or column you step into.'},
-  charger:{name:'Beast',      tpl:'bull',   pal:{a:'#e05a4a',b:'#8a2a22',c:'#ffd0dd'},ai:'haunt',  spd:1.4,shot:null,   cd:0,  pts:250,contact:2,desc:'A hunched, tusked beast. Charges the moment you line up with it.'},
+  charger:{name:'Beast',      tpl:'bull',   pal:{a:'#e05a4a',b:'#8a2a22',c:'#ffd0dd'},ai:'random', spd:1.4,shot:null,   cd:0,  pts:250,contact:2,desc:'A hunched, tusked beast. Roams the maze and hits hard if it reaches you.'},
   gunner: {name:'Shades',     tpl:'soldier',pal:{a:'#f0c040',b:'#2a2a2a',c:'#ffe066'},ai:'forward',spd:1,  shot:'slow',  cd:150,pts:300,desc:'Sunglasses and a steady aim: fires one slow shot at a time.'},
   hound:  {name:'Pink Brute', tpl:'hound',  pal:{a:'#f0a0b0',b:'#a05060',c:'#ff8a2a'},ai:'follow', spd:1,  shot:'flame', cd:70, pts:400,desc:'A bald brute with a flamethrower. Hunts you down and burns you at close range.'},
   flamer: {name:'Golem',      tpl:'imp',    pal:{a:'#d8a030',b:'#8a5a14',c:'#ffe27a'},ai:'follow', spd:0.9,shot:'fireball',cd:190,pts:300,desc:'A molten gold golem. Follows you and lobs slow fireballs.'},
-  ghost:  {name:'Wraith',     tpl:'ghost',  pal:{a:'#d8e6ff',b:'#9fb4d8'},ai:'dash',spd:1,shot:null,cd:0,pts:400,contact:2,ghost:true,desc:'A hooded ghost with red eyes. Drifts straight through walls to reach you.'},
+  ghost:  {name:'Wraith',     tpl:'ghost',  pal:{a:'#d8e6ff',b:'#9fb4d8'},ai:'dash',spd:1,shot:null,cd:0,pts:400,contact:2,ghost:true,desc:'A hooded ghost with red eyes. Drifts straight through walls, and rushes at you the moment it sees you.'},
   skull:  {name:'Pod Walker', tpl:'skull',  pal:{a:'#efe6d2',b:'#b8ab8f',c:'#5ad0ff'},ai:'follow', spd:1.2,shot:'blue',  cd:80, pts:500,desc:'An alien in a glass dome on robot legs. It follows you and shoots often.'},
   giggler:{name:'Orange Alien',tpl:'imp',   pal:{a:'#ff8a2a',b:'#a8461a',c:'#ffe066',h:'#ffe066'},ai:'follow',spd:1.6,shot:'wave',cd:200,pts:600,desc:'Fast and grinning. Only found in the last world, where it fires big wobbling waves.'}};
 const TYPES=Object.keys(EN);
@@ -1123,15 +1123,18 @@ function bfsStep(e){const t=nearestPlayer(e);if(!t)return null;const [tc,tr]=cel
       const nc=k%GW,nr=Math.floor(k/GW);return DIRS.findIndex(([dc,dr])=>e.tc+dc===nc&&e.tr+dr===nr);}
     for(const [dc,dr] of DIRS){const x=c+dc,y=r+dr,k=key(x,y);if(!prev.has(k)&&passE(e,x,y)){prev.set(k,key(c,r));q.push([x,y]);}}}
   return null;}
-function lineOfSight(e,range){for(const p of alive()){const [pc,pr]=cellAt(p.x,p.y);
+function lineOfSight(e,range,thru){for(const p of alive()){const [pc,pr]=cellAt(p.x,p.y);   // thru: walls don't block its view (ghosts)
     const rowAl=Math.abs(p.y-e.y)<9,colAl=Math.abs(p.x-e.x)<9;
-    if(rowAl&&Math.abs(pc-e.tc)<=range&&clearLine(e.tc,e.tr,pc,e.tr))return pc<e.tc?2:3;
-    if(colAl&&Math.abs(pr-e.tr)<=range&&clearLine(e.tc,e.tr,e.tc,pr))return pr<e.tr?1:0;}
+    if(rowAl&&Math.abs(pc-e.tc)<=range&&(thru?pc!==e.tc:true)&&(thru||clearLine(e.tc,e.tr,pc,e.tr)))return pc<e.tc?2:3;
+    if(colAl&&Math.abs(pr-e.tr)<=range&&(thru?pr!==e.tr:true)&&(thru||clearLine(e.tc,e.tr,e.tc,pr)))return pr<e.tr?1:0;}
   return -1;}
 function chooseDir(e){const d=EN[e.type],opts=DIRS.map((v,i)=>i).filter(i=>passE(e,e.tc+DIRS[i][0],e.tr+DIRS[i][1]));
   if(!opts.length)return -1;const rev=e.dir^1,fwd=opts.filter(i=>i!==rev);
   const R=Math.random;
   if(e.morph){return (fwd.length?fwd:opts)[Math.floor(R()*(fwd.length?fwd:opts).length)];}
+  if(d.ai==='dash'){   // a ghost that sees you rushes straight at you, through walls, for up to 10 tiles
+    if(e.charge&&e.chargeN-->0&&opts.includes(e.dir))return e.dir;e.charge=false;
+    const s=lineOfSight(e,9,true);if(s>=0&&opts.includes(s)){e.charge=true;e.chargeN=10;return s;}}
   if(d.ai==='follow'||d.ai==='dash'){const s=bfsStep(e);if(s!=null&&s>=0&&R()<0.85)return s;}
   if(d.ai==='haunt'&&!e.charge){const s=lineOfSight(e,9);if(s>=0&&opts.includes(s)){e.charge=true;return s;}}
   if(d.ai==='forward'||d.ai==='haunt'||d.ai==='dash'){if(opts.includes(e.dir))return e.dir;e.charge=false;return (fwd.length?fwd:opts)[Math.floor(R()*(fwd.length?fwd:opts).length)];}
@@ -1166,7 +1169,7 @@ function fire(e){const d=EN[e.type],sd=SHOT_DEF[d.shot],[dx,dy]=DIRS[e.dir];
 function updateShots(){for(const s of shots){s.t++;s.x+=s.vx;s.y+=s.vy;if(s.k==='wave'){s.x+=Math.sin(s.t*0.25)*(s.vy?1:0);s.y+=Math.sin(s.t*0.25)*(s.vx?1:0);}
     const c=Math.floor(s.x/TS),r=Math.floor(s.y/TS);
     if(!inB(c,r)||grid[r][c]==='#'||grid[r][c]==='%'||s.t>s.life||(s.k!=='boss'&&bossCell(c,r))){s.dead=true;continue;}
-    for(const p of alive())if(Math.abs(p.x+8-s.x)<7&&Math.abs(p.y+8-s.y)<7){if(p.shield<=0)hurt(p,SHOT_DEF[s.k].dmg);s.dead=true;burst(s.x+OX,s.y+OY,SHOT_DEF[s.k].col,5);break;}}
+    const hr=7+(SHOT_DEF[s.k].r||2);for(const p of alive())if(Math.abs(p.x+8-s.x)<hr&&Math.abs(p.y+8-s.y)<hr){if(p.shield<=0)hurt(p,SHOT_DEF[s.k].dmg);s.dead=true;burst(s.x+OX,s.y+OY,SHOT_DEF[s.k].col,5);break;}}
   shots=shots.filter(s=>!s.dead);}
 function killEnemy(e,by){if(e.dead)return;e.dead=true;e.deadT=e.morph?52:36;const d=EN[e.type];sfx('kill');
   addScore(by||players[0],d.pts*(e.morph?2:1),e.x+8+OX,e.y+OY);burst(e.x+8+OX,e.y+8+OY,d.pal.a,10);
