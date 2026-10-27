@@ -485,10 +485,10 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <p>Every level has a clock. When it runs out, <b>HURRY UP!</b> flashes and the aliens speed up and shoot twice as often.</p>
 
       <h3>Coins and EXTRA</h3>
-      <p>Pick up every coin on a level to start the <b>EXTRA GAME</b>: any alien still falling apart on the board turns into a letter, and for 30 seconds every alien left turns into a harmless blue blob that drops a letter when you blow it up. It still works in the last seconds after the last alien falls. A letter you don't pick up within 5 seconds turns into the next one, so you can wait for the one you need. Collect all five, E, X, T, R and A, for an extra life and 5,000 points. Letters you collect are kept from level to level.</p>
+      <p>Pick up every coin on a level to start the <b>EXTRA GAME</b>: any alien body still on the board (bodies stay for 2 seconds) turns into a letter, and for 30 seconds every alien left turns into a harmless blue blob that drops a letter when you blow it up. It still works in the last seconds after the last alien falls. A letter you don't pick up within 5 seconds turns into the next one, so you can wait for the one you need. Collect all five, E, X, T, R and A, for an extra life and 5,000 points. Letters you collect are kept from level to level.</p>
 
       <h3>Power-ups</h3>
-      <p>Smashed crates sometimes leave a power-up behind. It lasts 10 seconds, and a blast destroys it. Lose a life and you lose your power-ups too: you're back to 4 bombs, a blast of 2 and a normal fuse.</p>
+      <p>Smashed crates sometimes leave a power-up behind. It lasts 10 seconds, and a blast destroys it. Lose a life and you lose your power-ups too: you're back to 5 bombs, a blast of 2 and a normal fuse.</p>
       <ul class="powers" id="powers"></ul>
 
       <h3>Aliens</h3>
@@ -515,7 +515,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=27;   // goes up by one with every update
+const GAME_BUILD=29;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],S:[0,1],X:[1,2]};   // online guests: what moves, so it glides between snapshots (see the Online Kit)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -824,7 +824,7 @@ const SHOT_SPR={pellet:[cell('eatk',0,1),cell('eatk',0,2)],slow:[cell('eatk',2,0
 const BONUS={   // type: [name, colour, description]
   bombs:['Extra Bomb','#3a3a44','You can have one more bomb out at a time (up to 8).'],
   fuse:['Quick Fuse','#2a7ad0','Your bombs go off twice as fast.'],
-  range:['Bigger Blast','#e2662a','Your blasts reach one tile further (up to 6).'],
+  range:['Bigger Blast','#e2662a','Your blasts reach one tile further (up to 3).'],
   shield:['Shield','#2aa0a0','Nothing can hurt you for 20 seconds.'],
   speedy:['Speed Boots','#d0a020','You run much faster for 20 seconds.'],
   zapper:['Lightning','#8a3ad8','A wave sweeps the board from left to right and cracks every crate.'],
@@ -948,7 +948,7 @@ let timeLeft=0,hurry=false,extraT=0,introT=0,clearT=0,overT=0,explId=0,zaps=[];
 const input=[0,1,2,3].map(()=>mkIn());
 function mkIn(){return {up:false,down:false,left:false,right:false,bomb:false,bombP:false,last:null};}
 const curWorld=()=>Math.min(7,Math.floor(level/10));
-function newPlayer(i){const [c,r]=SPAWN[i];return {id:i,x:c*TS,y:r*TS,dir:0,anim:0,hp:MAXHP,lives:3,score:0,maxBombs:4,range:2,quick:false,
+function newPlayer(i){const [c,r]=SPAWN[i];return {id:i,x:c*TS,y:r*TS,dir:0,anim:0,hp:MAXHP,lives:3,score:0,maxBombs:5,range:2,quick:false,
   shield:0,speedy:0,dmgT:0,dead:false,deadT:0,out:false,letters:[0,0,0,0,0],nextLife:50000,tpCd:0};}
 
 function startGame(n){
@@ -1017,7 +1017,7 @@ function clearLine(c1,r1,c2,r2){   // nothing solid between two tiles in a strai
 /* ---------- players ---------- */
 function hurt(p,d){if(p.dead||p.out||p.shield>0||p.dmgT>0||state!=='play')return;
   p.hp-=Math.max(1,Math.round(d*MD().dmg));p.dmgT=60;sfx('hurt');burst(p.x+8+OX,p.y+8+OY,'#ff5a5a',6);
-  if(p.hp<=0){p.hp=0;p.dead=true;p.deadT=150;p.lives--;p.speedy=0;p.shield=0;p.maxBombs=4;p.range=2;p.quick=false;sfx('die');burst(p.x+8+OX,p.y+8+OY,PCOL[p.id].a,16);}}
+  if(p.hp<=0){p.hp=0;p.dead=true;p.deadT=150;p.lives--;p.speedy=0;p.shield=0;p.maxBombs=5;p.range=2;p.quick=false;sfx('die');burst(p.x+8+OX,p.y+8+OY,PCOL[p.id].a,16);}}
 function updatePlayer(p){
   if(p.out)return;
   if(p.dead){if(--p.deadT<=0){if(p.lives>0){const [c,r]=SPAWN[p.id];p.x=c*TS;p.y=r*TS;p.hp=MAXHP;p.dead=false;p.shield=180;p.dir=0;}else p.out=true;}return;}
@@ -1062,7 +1062,7 @@ function takeBonus(p,type){addScore(p,100,p.x+8+OX,p.y+OY);sfx(type==='zapper'?'
   if(captions)addText(p.x+8+OX,p.y-6+OY,BONUS[type][0].toUpperCase(),'#ffffff',60);
   if(type==='bombs')p.maxBombs=Math.min(8,p.maxBombs+1);
   else if(type==='fuse')p.quick=true;
-  else if(type==='range')p.range=Math.min(6,p.range+1);
+  else if(type==='range')p.range=Math.min(3,p.range+1);   // longest blast: 3 tiles
   else if(type==='shield')p.shield=1200;
   else if(type==='speedy')p.speedy=1200;
   else if(type==='heart')p.hp=Math.min(MAXHP,p.hp+4);
@@ -1097,6 +1097,7 @@ function explode(b){
   for(const [dc,dr,kh] of [[1,0,'h'],[-1,0,'h'],[0,1,'v'],[0,-1,'v']]){
     for(let s=1;s<=b.range;s++){const c=b.c+dc*s,r=b.r+dr*s;
       if(!inB(c,r)||grid[r][c]==='#')break;
+      if(flames.some(f=>f.k==='x'&&f.t>0&&f.c===c&&f.r===r))break;   // a crate still breaking apart blocks the blast, so a chain of bombs only breaks the outer crate
       const bh=bossAt(c,r);if(bh){if(!b.hitB)b.hitB=new Set();if(!b.hitB.has(bh)){b.hitB.add(bh);hitBoss(owner,1,bh);}break;}
       const end=s===b.range;
       if(grid[r][c]==='%'){crackCrate(c,r,b.owner,true);Object.assign(flames[flames.length-1],{id,d:s});sfx('crate');break;}   // the blast stops at the crate: it cracks but burns nothing
@@ -1175,7 +1176,8 @@ function updateShots(){for(const s of shots){s.t++;s.x+=s.vx;s.y+=s.vy;if(s.k===
     if(!inB(c,r)||grid[r][c]==='#'||grid[r][c]==='%'||s.t>s.life||(s.k!=='boss'&&bossCell(c,r))){s.dead=true;continue;}
     const hr=7+(SHOT_DEF[s.k].r||2);for(const p of alive())if(Math.abs(p.x+8-s.x)<hr&&Math.abs(p.y+8-s.y)<hr){if(p.shield<=0)hurt(p,SHOT_DEF[s.k].dmg);s.dead=true;burst(s.x+OX,s.y+OY,SHOT_DEF[s.k].col,5);break;}}
   shots=shots.filter(s=>!s.dead);}
-function killEnemy(e,by){if(e.dead)return;e.dead=true;e.deadT=e.morph?52:36;const d=EN[e.type];sfx('kill');
+const BODY_T=120;   // a knocked-out alien's body stays on the board for 2 seconds (the fall-apart animation is the first 36 frames)
+function killEnemy(e,by){if(e.dead)return;e.dead=true;e.deadT=e.morph?52:BODY_T;const d=EN[e.type];sfx('kill');
   addScore(by||players[0],d.pts*(e.morph?2:1),e.x+8+OX,e.y+OY);burst(e.x+8+OX,e.y+8+OY,d.pal.a,10);
   if(e.morph){const l=Math.floor(Math.random()*5);   // a random letter of EXTRA each time, not in order
     letters.push({c:Math.round(e.x/TS),r:Math.round(e.y/TS),l,t:900,ch:0});}}
@@ -1264,7 +1266,7 @@ function drawEnemy(e){const s=ESPR[e.type],x=Math.round(OX+e.x),y=Math.round(OY+
   if(e.dead&&e.morph){   // a blue blob spins round when it's hit, then pops
     const t=52-e.deadT;if(t<36){dr(BLOB.walk[[0,3,1,2][(t>>2)%4]][0],x,y);return;}
     ctx.globalAlpha=Math.min(1,e.deadT/8);dr(BLOB.die[t<44?0:1],x,y);ctx.globalAlpha=1;return;}
-  if(e.dead){const k=Math.min(s.die.length-1,Math.floor((36-e.deadT)*s.die.length/36));ctx.globalAlpha=Math.min(1,e.deadT/10);dr(s.die[k],x,y);ctx.globalAlpha=1;return;}
+  if(e.dead){const k=Math.min(s.die.length-1,Math.floor((BODY_T-e.deadT)*s.die.length/36));ctx.globalAlpha=Math.min(1,e.deadT/10);dr(s.die[k],x,y);ctx.globalAlpha=1;return;}
   const img=e.morph?BLOB.walk[d][0]:e.block>0?s.atk[d]:s.walk[d][fr];
   const ghost=EN[e.type].ghost,bob=ghost?Math.round(Math.sin(e.anim*0.12)*1.5):0;
   if(ghost){ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(x+4,y+14,8,2);
