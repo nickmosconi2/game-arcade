@@ -485,7 +485,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <p>Every level has a clock. When it runs out, <b>HURRY UP!</b> flashes and the aliens speed up and shoot twice as often.</p>
 
       <h3>Coins and EXTRA</h3>
-      <p>Pick up every coin on a level to start the <b>EXTRA GAME</b>: for 30 seconds every alien turns into a harmless blue blob, and each one you blow up drops a random letter. Collect all five, E, X, T, R and A, for an extra life and 5,000 points. Letters you collect are kept from level to level.</p>
+      <p>Pick up every coin on a level to start the <b>EXTRA GAME</b>: any alien still falling apart on the board turns into a letter, and for 30 seconds every alien left turns into a harmless blue blob that drops a letter when you blow it up. It still works in the last seconds after the last alien falls. A letter you don't pick up within 5 seconds turns into the next one, so you can wait for the one you need. Collect all five, E, X, T, R and A, for an extra life and 5,000 points. Letters you collect are kept from level to level.</p>
 
       <h3>Power-ups</h3>
       <p>Smashed crates sometimes leave a power-up behind. It lasts 10 seconds, and a blast destroys it. Lose a life and you lose your power-ups too: you're back to 4 bombs, a blast of 2 and a normal fuse.</p>
@@ -498,7 +498,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
       <table class="keys zones" id="worlds"></table>
 
       <h3>Scoring</h3>
-      <p>Aliens are worth 100 to 600 points, crates 10, coins 100 and power-ups 100. When the last alien falls, the clock stops and you get 4 more seconds to grab coins, letters and power-ups (bombs still hurt). Then the level ends and adds 10 points for every second left on the clock. An extra life every 50,000 points.</p>
+      <p>Aliens are worth 100 to 600 points, crates 10, coins 100 and power-ups 100. When the last alien falls, the clock stops and you get 5 more seconds to grab coins, letters and power-ups (bombs still hurt). Then the level ends and adds 10 points for every second left on the clock. An extra life every 50,000 points.</p>
 
       <h3>Difficulty</h3>
       <p>Pick Easy, Medium or Hard before you start: Left and Right on the title screen, or Options › Difficulty. Easy gives more power-ups, fewer aliens, more time and gentler hits. Hard is the other way round.</p>
@@ -515,7 +515,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=26;   // goes up by one with every update
+const GAME_BUILD=27;   // goes up by one with every update
 const GAME_ID='boom',GAME_NAME='BOOM';
 const SNAP_SMOOTH={P:[1,2],E:[1,2],S:[0,1],X:[1,2]};   // online guests: what moves, so it glides between snapshots (see the Online Kit)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -1034,7 +1034,7 @@ function updatePlayer(p){
   const [c,r]=cellAt(p.x,p.y);
   // pick-ups
   for(const co of coins)if(!co.got&&co.c===c&&co.r===r){co.got=true;co.spin=performance.now();addScore(p,100,co.c*TS+8+OX,co.r*TS+OY);sfx('coin');
-    if(coins.every(k=>k.got)&&enemies.some(e=>!e.dead)&&!extraT)startExtra();}
+    if(coins.every(k=>k.got)&&!extraT&&enemies.some(e=>!e.dead||(!e.morph&&e.deadT>0)))startExtra();}
   for(const it of items)if(!it.dead&&it.c===c&&it.r===r){it.dead=true;takeBonus(p,it.type);}
   for(const l of letters)if(!l.dead&&l.c===c&&l.r===r){l.dead=true;p.letters[l.l]=1;sfx('letter');addText(l.c*TS+8+OX,l.r*TS+OY,LETTERS[l.l],LETTER_COL[l.l],50);
     if(p.letters.every(v=>v)){p.letters=[0,0,0,0,0];p.lives++;addScore(p,5000,p.x+8+OX,p.y+OY);sfx('life');addText(160,OY+80,'EXTRA LIFE!','#7dff7d',120);}}
@@ -1070,12 +1070,16 @@ function takeBonus(p,type){addScore(p,100,p.x+8+OX,p.y+OY);sfx(type==='zapper'?'
   else if(type==='zapper')zapWave={col:0,t:0,owner:p.id};
   else if(type==='nuke'){for(const e of enemies)if(!e.dead)killEnemy(e,p);for(const b of bosses)if(!b.dead)hitBoss(p,3,b);sfx('boom');}
 }
-function startExtra(){extraT=1800;for(const e of enemies)if(!e.dead)e.morph=true;sfx('extra');addText(160,OY+70,'EXTRA GAME!','#ffe066',150);
+function startExtra(){const live=enemies.some(e=>!e.dead);
+  for(const e of enemies)if(e.dead&&!e.morph&&e.deadT>0){e.deadT=0;letters.push({c:Math.round(e.x/TS),r:Math.round(e.y/TS),l:Math.floor(Math.random()*5),t:900,ch:0});}   // a body still on the board becomes a letter
+  if(wrapT>0)wrapT=Math.max(wrapT,300);   // the level was ending: 5 seconds to grab them
+  if(!live){sfx('extra');addText(160,OY+70,'EXTRA LETTERS!','#ffe066',120);return;}
+  extraT=1800;for(const e of enemies)if(!e.dead)e.morph=true;sfx('extra');addText(160,OY+70,'EXTRA GAME!','#ffe066',150);
   if(captions)addText(160,OY+86,'BLOW UP THE BLUE BLOBS FOR LETTERS','#ffffff',150);}
 function endExtra(){extraT=0;for(const e of enemies)e.morph=false;for(const l of letters)l.dead=true;}
 
 /* ---------- bombs and blasts ---------- */
-let quakeT=0,zapWave=null,wrapT=0;   // wrapT: the 4 seconds after the last alien falls, to grab what's left
+let quakeT=0,zapWave=null,wrapT=0;   // wrapT: the 5 seconds after the last alien falls, to grab what's left
 function crackCrate(c,r,owner,safe){   // a crate breaks apart; sometimes it leaves a power-up behind
   grid[r][c]='.';flames.push({c,r,k:'x',t:30,id:++explId,owner,safe});addScore(pById(owner),10);
   for(let k=0;k<6;k++)parts.push({x:c*TS+8+OX,y:r*TS+8+OY,vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,t:20,col:WORLDS[curWorld()].crate});
@@ -1174,7 +1178,7 @@ function updateShots(){for(const s of shots){s.t++;s.x+=s.vx;s.y+=s.vy;if(s.k===
 function killEnemy(e,by){if(e.dead)return;e.dead=true;e.deadT=e.morph?52:36;const d=EN[e.type];sfx('kill');
   addScore(by||players[0],d.pts*(e.morph?2:1),e.x+8+OX,e.y+OY);burst(e.x+8+OX,e.y+8+OY,d.pal.a,10);
   if(e.morph){const l=Math.floor(Math.random()*5);   // a random letter of EXTRA each time, not in order
-    letters.push({c:Math.round(e.x/TS),r:Math.round(e.y/TS),l,t:900});}}
+    letters.push({c:Math.round(e.x/TS),r:Math.round(e.y/TS),l,t:900,ch:0});}}
 
 /* ---------- the boss ---------- */
 function hitBoss(by,n,boss){if(!boss||boss.dead)return;boss.hp-=n;boss.hit=10;sfx('bosshit');
@@ -1214,14 +1218,15 @@ function step(){
   enemies=enemies.filter(e=>!(e.dead&&e.deadT<=0));
   updateShots();updateBoss();updateZapWave();
   for(const it of items){if(it.born)it.born--;if(--it.t<=0)it.dead=true;}items=items.filter(i=>!i.dead);
-  for(const l of letters)if(--l.t<=0)l.dead=true;letters=letters.filter(l=>!l.dead);
+  for(const l of letters){if(--l.t<=0){l.dead=true;continue;}if((l.ch=(l.ch||0)+1)>=300){l.ch=0;l.l=(l.l+1)%5;burst(l.c*TS+8+OX,l.r*TS+8+OY,LETTER_COL[l.l],6);}}   // every 5 seconds it becomes the next letter
+  letters=letters.filter(l=>!l.dead);
   if(extraT>0&&--extraT===0)endExtra();
   if(timeLeft>0&&!wrapT){timeLeft--;if(timeLeft===0&&!hurry){hurry=true;sfx('hurry');addText(160,OY+100,'HURRY UP!','#ff5a5a',150);}}
   // all out: game over
   if(players.length&&players.every(p=>p.out)){state='over';overT=0;musicStop();sfx('over');save('hi',hi);recordScores();return;}
   // level clear
   if(!wrapT&&!enemies.some(e=>!e.dead)&&bosses.every(b=>b.dead&&b.deadT<=0)){
-    wrapT=240;addText(FCX,OY+80,'ALL CLEAR!','#8aeaff',90);}
+    wrapT=300;addText(FCX,OY+80,'ALL CLEAR!','#8aeaff',90);}
   // after 4 seconds of picking things up (bombs still hurt), the level ends and the scores are counted
   if(wrapT&&--wrapT===0){
     state='clear';clearT=240;const secs=Math.ceil(timeLeft/60);
