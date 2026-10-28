@@ -444,14 +444,14 @@ function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);
   if(!arc.removed.includes(code))arc.removed.push(code);arcSv('removed',arc.removed);arcSv('friends',arc.friends);arc.onChange();}
 function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arcHello();arc.onChange();}
 function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on){arc.blocked=false;arcStart();}else arcStop();arc.onChange();}
-const ARC_ORDER={hosting:0,idle:0,arcade:1,solo:1,playing:2,full:2,offline:3};
+const ARC_ORDER={hosting:0,idle:0,arcade:1,solo:1,playing:2,full:2,watching:2,offline:3};
 function arcFriendList(){   // everyone on your Players list: online first (joinable ones at the top), then offline, most recently seen first
   return arc.friends.map(f=>{const s=arc.seen[f.code],live=s&&s.open?s:arc.everyone[f.code]||null;   // what they told us, else what the lobby desk says
     return Object.assign({},live||{status:'offline'},{code:f.code,name:(live&&live.name&&live.name!=='PLAYER'?live.name:f.name)||(live&&live.name)||'PLAYER',t:f.t||0});})
   .sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||(a.status==='offline'?b.t-a.t:a.name.localeCompare(b.name)));}
 function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what a friend is doing, the same everywhere
   switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'In '+gn+', join them!';case 'solo':return 'Playing '+gn+' alone';
-    case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';default:return 'Offline';}}
+    case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';case 'watching':return 'Watching '+gn;default:return 'Offline';}}
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
 function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
   arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':'';}
@@ -513,11 +513,13 @@ function shelf(){const el=$('shelf');el.innerHTML='';   // one row per game: nam
 const COLORS=['#e4572e','#2f6fd6','#22a95b','#b14aed','#e8931c','#0fa3b1','#d6336c','#5c6ac4'];
 function tint(code){let h=0;for(const ch of code)h=(h*31+ch.charCodeAt(0))>>>0;return COLORS[h%COLORS.length];}
 function describe(f){
-  const g=byId(f.game),text=arcDescribe(Object.assign({},f,{gameName:f.gameName||(g&&g.name)}));
+  const g=byId(f.game),text=arcDescribe(Object.assign({},f,{gameName:f.gameName||(g&&g.name)})),watch=!!(f.w&&g);
+  if(f.status!=='offline'&&f.held&&f.held.includes(arc.tag)&&f.join&&g)return {text:'Your spot in '+g.name+' is waiting',dot:'var(--or)',act:'rejoin',watch};   // you left their game: go back in
   switch(f.status){
-    case 'arcade':case 'solo':return {text,dot:'var(--go)',act:'invite'};
+    case 'arcade':return {text,dot:'var(--go)',act:'invite'};
+    case 'solo':return {text,dot:'var(--go)',act:'invite',watch};
     case 'idle':case 'hosting':return {text,dot:'var(--or)',act:'join'};   // on a game's menu or hosting: click to join them
-    case 'full':case 'playing':return {text,dot:'var(--busy)'};
+    case 'full':case 'playing':case 'watching':return {text,dot:'var(--busy)',act:watch?'watch':'',watch};
     default:return {text,dot:'var(--off)',off:true};}
 }
 function personRow(f,isFriend){const d=describe(f),li=document.createElement('li');li.className='row'+(d.off?' off':'');
@@ -526,7 +528,8 @@ function personRow(f,isFriend){const d=describe(f),li=document.createElement('li
     li.querySelector('b').textContent=f.name;li.querySelector('small').textContent=d.text;
     const pick=li.querySelector('.pick');pick.title='Play with '+f.name;pick.onclick=e=>friendMenu(e.currentTarget,f);
     const side=li.querySelector('.side');
-    if(d.act==='join'&&byId(f.game)&&f.join){const b=document.createElement('button');b.className='mini join';b.textContent='Join';b.onclick=()=>go(byId(f.game),{join:f.join});side.appendChild(b);}
+    if((d.act==='join'||d.act==='rejoin')&&byId(f.game)&&f.join){const b=document.createElement('button');b.className='mini join';b.textContent=d.act==='rejoin'?'Rejoin':'Join';b.onclick=()=>go(byId(f.game),{join:f.join});side.appendChild(b);}
+    else if(d.act==='watch'){const b=document.createElement('button');b.className='mini';b.textContent='Watch';b.onclick=()=>go(byId(f.game),{watch:f.w});side.appendChild(b);}
     else if(d.act==='invite'&&GAMES.some(g=>g.online)){const b=document.createElement('button');b.className='mini';b.textContent=f.invited?'Invited':'Invite';b.onclick=e=>friendMenu(e.currentTarget,f,true);side.appendChild(b);}
     return li;}
 function render(){
@@ -551,7 +554,8 @@ let pop=null;
 function closePop(){if(pop){pop.remove();pop=null;}}
 // clicking a friend: join what they're hosting, invite them to any online game, or remove them
 function friendMenu(btn,f,inviteOnly){closePop();const games=GAMES.filter(g=>g.online).sort((a,b)=>(b===cur)-(a===cur)),d=describe(f),items=[];
-  if(d.act==='join'&&byId(f.game)&&f.join)items.push(['Join '+f.name+' in '+byId(f.game).name,()=>go(byId(f.game),{join:f.join}),'join']);
+  if((d.act==='join'||d.act==='rejoin')&&byId(f.game)&&f.join)items.push([(d.act==='rejoin'?'Rejoin ':'Join ')+f.name+' in '+byId(f.game).name,()=>go(byId(f.game),{join:f.join}),'join']);
+  if(d.watch)items.push(['Watch '+f.name+' play '+byId(f.game).name,()=>go(byId(f.game),{watch:f.w})]);
   if(d.act==='invite'||d.act==='join')for(const g of games)items.push(['Invite to '+g.name,()=>go(g,{host:1,invite:f.code})]);
   if(inviteOnly&&games.length===1&&items.length===1){items[0][1]();return;}
   pop=document.createElement('div');pop.className='pop';pop.setAttribute('role','menu');
@@ -603,7 +607,7 @@ arc.onFriendAdded=name=>{const m=$('add-msg');m.classList.remove('err');m.textCo
 $('visible').onchange=e=>arcSetVisible(e.target.checked);
 arc.me=()=>({status:'arcade'});arc.onChange=render;
 const GO=ARC_QS.get('go');
-if(GO){const g=byId(GO),params={};for(const k of ['join','host','invite'])if(ARC_QS.get(k))params[k]=ARC_QS.get(k);
+if(GO){const g=byId(GO),params={};for(const k of ['join','host','invite','watch'])if(ARC_QS.get(k))params[k]=ARC_QS.get(k);
   if(g){if(needName())askName(()=>go(g,params));else go(g,params);return;}
   $('add-msg').textContent="That game isn't in this Arcade yet.";}
 

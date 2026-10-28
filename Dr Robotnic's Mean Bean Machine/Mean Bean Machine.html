@@ -522,7 +522,7 @@ body{background:radial-gradient(120% 60% at 50% 110%,rgba(41,231,255,.16),transp
 'use strict';
 // a copy of this whole game exactly as it was opened, so it can be passed to a friend whose copy is older
 const SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const GAME_BUILD=16;   // goes up by one with every update
+const GAME_BUILD=17;   // goes up by one with every update
 const GAME_ID='meanbean',GAME_NAME="Dr. Robotnik's Mean Bean Machine";
 const SNAP_SMOOTH={O:[4],P:[1]};   // online guests: attack orbs and pop bursts glide between snapshots (the falling pair glides by itself)
 /* ===== ARCADE PRESENCE v2 — part 1 of the Arcade Online Kit ("Online Kit/arcade-online-kit.js") =====
@@ -694,14 +694,14 @@ function arcRemoveFriend(code){arc.friends=arc.friends.filter(f=>f.code!==code);
   if(!arc.removed.includes(code))arc.removed.push(code);arcSv('removed',arc.removed);arcSv('friends',arc.friends);arc.onChange();}
 function arcSetName(n){arc.name=(n||'').trim().toUpperCase().slice(0,12)||'PLAYER';arcSv('name',arc.name);arcPing();arcHello();arc.onChange();}
 function arcSetVisible(on){arc.visible=on;arcSv('visible',on);if(on){arc.blocked=false;arcStart();}else arcStop();arc.onChange();}
-const ARC_ORDER={hosting:0,idle:0,arcade:1,solo:1,playing:2,full:2,offline:3};
+const ARC_ORDER={hosting:0,idle:0,arcade:1,solo:1,playing:2,full:2,watching:2,offline:3};
 function arcFriendList(){   // everyone on your Players list: online first (joinable ones at the top), then offline, most recently seen first
   return arc.friends.map(f=>{const s=arc.seen[f.code],live=s&&s.open?s:arc.everyone[f.code]||null;   // what they told us, else what the lobby desk says
     return Object.assign({},live||{status:'offline'},{code:f.code,name:(live&&live.name&&live.name!=='PLAYER'?live.name:f.name)||(live&&live.name)||'PLAYER',t:f.t||0});})
   .sort((a,b)=>(ARC_ORDER[a.status]??3)-(ARC_ORDER[b.status]??3)||(a.status==='offline'?b.t-a.t:a.name.localeCompare(b.name)));}
 function arcDescribe(f){const gn=f.gameName||'a game';   // one line about what a friend is doing, the same everywhere
   switch(f.status){case 'arcade':return 'Online in the Arcade';case 'idle':return 'In '+gn+', join them!';case 'solo':return 'Playing '+gn+' alone';
-    case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';default:return 'Offline';}}
+    case 'hosting':return 'Hosting '+gn+', join them!';case 'full':return 'Playing '+gn+' (game full)';case 'playing':return 'Playing '+gn+' online';case 'watching':return 'Watching '+gn;default:return 'Offline';}}
 function arcInvite(code,game,gameName,join){arcSend('OFFER',code,{invite:1,name:arc.name,game,gameName,join});}
 function arcStatusLine(){return !arc.visible?'You are hidden. Friends see you as offline.':arc.refused?'You are in an online game in another tab, so this tab stays offline until it ends.':
   arc.blocked?'You are online in another tab. Click anywhere here to move online to this tab.':'';}
@@ -824,7 +824,7 @@ function newBoard(side,opts){return {side,x:side?208:16,y:16,g:new Array(ROWS*CO
   ctext:'',ctextT:0,lockT:0,fallT:0,fallF:opts.fallF||22,cpu:!!opts.cpu,ai:opts.ai||null,plan:null,das:0,dasDir:0,qt:0,
   colors:opts.colors||5,rng:opts.rng,softRows:0,placed:0,lost:false,loseT:0,maxChain:0,beans:0,squash:0,anim:0,drops:0};}
 // one shared bean sequence for both players (fair), made from a seed so online play matches
-function mkRng(seed){let s=seed>>>0||1;return ()=>{s^=s<<13;s>>>=0;s^=s>>17;s^=s<<5;s>>>=0;return s/4294967296;};}
+function mkRng(seed){const f=()=>{let s=f.s;s^=s<<13;s>>>=0;s^=s>>17;s^=s<<5;s>>>=0;f.s=s;return s/4294967296;};f.s=seed>>>0||1;return f;}   // f.s: its state, so a hand-over can carry it on
 let pairSeq=[],seqRng=null;
 function pairAt(i,colors){while(pairSeq.length<=i)pairSeq.push([Math.floor(seqRng()*5),Math.floor(seqRng()*5)]);
   const p=pairSeq[i];return colors<5?[p[0]%colors,p[1]%colors]:p;}
@@ -1324,6 +1324,14 @@ function unpackBoard(o,side){const b=newBoard(side,{});for(let i=0;i<o.g.length;
   b.piece=o.p?{a:o.p[0],b:o.p[1],col:o.p[2],py:o.p[3],rot:o.p[4]}:null;b.queue=[];for(let i=0;i<o.q.length;i+=2)b.queue.push([o.q[i],o.q[i+1]]);
   b.fallers=o.f.map(a=>({c:a[0],col:a[1],y:a[2],vy:a[3]/10}));b.ph=o.ph;b.popT=o.pt;b.popCells=[];for(let i=0;i<o.pc.length;i+=2)b.popCells.push([o.pc[i],o.pc[i+1]]);
   b.fallT=o.ft||0;b.fallF=o.ff||22;b.drops=o.dr||0;b.score=o.s;b.ctext=o.ct;b.ctextT=o.ctt;b.pend=o.pd;b.anim=o.an;for(const i of o.sq)b.sq[i]=3;b.beans=o.bn||0;return b;}
+/* ---------- online hand-over: the whole game as plain data (see the Online Kit) ---------- */
+function fullState(){return {state,paused,gmode,stage,frame,stT,menuSel,scenSel,totalScore,playT,resultT,bonus,overCount,overT,cutLine,cutChars,cutHold,lineupT,endT,winner,
+  vsLevel,vsReady,vsWins,vsSeed,exLevel,exPieces,mugAnim,mugT,oppMug,playMode,pairSeq,seqS:seqRng?seqRng.s:0,gS:gRnd&&gRnd.s?gRnd.s:0,
+  boards,orbs,parts:parts.map(p=>({b:boards.indexOf(p.b),t:p.t,cells:p.cells}))};}
+function loadFullState(o){for(const k of ['state','paused','gmode','stage','frame','stT','menuSel','scenSel','totalScore','playT','resultT','bonus','overCount','overT','cutLine','cutChars','cutHold','lineupT','endT','winner',
+    'vsLevel','vsReady','vsWins','vsSeed','exLevel','exPieces','mugAnim','mugT','oppMug','playMode'])if(k in o)eval(k+'=o[k]');
+  pairSeq=o.pairSeq||[];seqRng=mkRng(1);seqRng.s=o.seqS||1;if(o.gS){gRnd=mkRng(1);gRnd.s=o.gS;}else gRnd=Math.random;
+  boards=o.boards||[];orbs=o.orbs||[];parts=(o.parts||[]).map(p=>({b:boards[p.b],t:p.t,cells:p.cells})).filter(p=>p.b);}
 function packSnap(){return {st:state,gm:gmode,sg:stage,pa:paused?1:0,fr:frame,t:stT,rt:resultT,w:winner,vl:vsLevel,vr:vsReady.map(v=>v?1:0),vw:vsWins,mu:mugAnim,pl:playT,bo:bonus,
   B:boards.map(packBoard),O:orbs.map(o=>[Math.round(o.x0),Math.round(o.y0),Math.round(o.x1),Math.round(o.y1),o.t,o.T,o.c]),
   P:parts.map(p=>[p.b.side,p.t,p.cells.flat()]),ev:evLog.slice(-20)};}
@@ -1351,19 +1359,30 @@ function applySnap(s){state=s.st;gmode=s.gm;stage=s.sg;paused=!!s.pa;frame=s.fr;
    them straight away. The relay sends every second snapshot, and only the parts that changed.
    A game that predicts its own player (Bub & Bob 2) counts its frames in net.q; every snapshot's aq[slot] says the
    newest frame of that guest's the host has acted on, so the guest can replay just the newer ones.
-   Lobbies: anyone on a game's menu can be joined straight away (their lobby opens for you); no one has to host first. */
+   Lobbies: anyone on a game's menu can be joined straight away (their lobby opens for you); no one has to host first.
+   Watching: anyone playing (alone or online) can be watched; a watcher gets the snapshots but has no player (net.watch,
+   net.slot -1) and sends no keys. Leaving and coming back: a player who leaves a game in progress keeps their spot for
+   HOLD_MS and gets it back with Rejoin (their character just stands still meanwhile). Hand-over: if the game defines
+   fullState() (everything needed to carry on, as plain JSON) and loadFullState(o), the host sends it to its players about
+   once a second; when the host leaves mid-game, the remaining player with the lowest number takes over from it and the
+   others reconnect to them. netMe() is the player number this browser's own keys and pads drive (0 for a host,
+   unless it took over someone else's game). */
 const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun2.l.google.com:19302']},
   {urls:'stun:stun.cloudflare.com:3478'},
   {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}]};
-const RELAY_AFTER=6000,RELAY_EVERY=2,RELAY_FULL=30,SNAP_JUMP=96,JOIN_GIVEUP=25000,QUIET_DROP=9000;
-const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,fr:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false,q:0};
+const RELAY_AFTER=6000,RELAY_EVERY=2,RELAY_FULL=30,SNAP_JUMP=96,JOIN_GIVEUP=25000,QUIET_DROP=9000,HOLD_MS=120000,MAX_WATCH=6,FS_EVERY=60,FS_EVERY_RELAY=240;
+const net={role:null,host:null,guests:{},pc:null,ch:null,cand:[],slot:0,seq:0,fr:0,lastSeq:0,snap:null,gIn:{},cnt:{},rc:{},msg:'',peerBuild:null,upd:false,q:0,
+  own:0,held:{},watch:false,fs:null};
+function netMe(){return net.role==='guest'?net.slot:(net.own||0);}   // the player this browser's own keys drive
 const send=(type,code,payload)=>arcSend(type,code,Object.assign({game:GAME_ID},payload));
 function lobbyChanged(){if(typeof onLobbyChange==='function')onLobbyChange();}
 function say(m){net.msg=m;lobbyChanged();}
-arc.me=()=>{if(net.role==='host'){const n=Object.values(net.guests).filter(g=>!g.upd).length+1,live=n>1&&gameStatus()==='playing';
-    return {status:n>=MAX_PLAYERS||live?'full':'hosting',game:GAME_ID,gameName:GAME_NAME,join:arc.tag,v:GAME_BUILD};}
-  if(net.role==='guest')return {status:'playing',game:GAME_ID,gameName:GAME_NAME,v:GAME_BUILD};
-  const st=gameStatus();return {status:st,game:GAME_ID,gameName:GAME_NAME,join:st==='idle'?arc.tag:undefined,v:GAME_BUILD};};   // on the game's menu: anyone can join
+function netPlayers(){return Object.values(net.guests).filter(g=>!g.upd&&!g.watch);}
+arc.me=()=>{if(net.role==='host'){const n=netPlayers().length+1,inGame=gameStatus()==='playing',held=Object.keys(net.held);
+    const o={status:inGame?(n>1?'playing':'solo'):(n>=MAX_PLAYERS?'full':'hosting'),game:GAME_ID,gameName:GAME_NAME,join:arc.tag,w:arc.tag,v:GAME_BUILD};
+    if(held.length)o.held=held;return o;}   // held: who can rejoin their spot
+  if(net.role==='guest')return {status:net.watch?'watching':'playing',game:GAME_ID,gameName:GAME_NAME,w:net.host,v:GAME_BUILD};   // w: whose game to watch
+  const st=gameStatus();return {status:st,game:GAME_ID,gameName:GAME_NAME,join:st==='idle'?arc.tag:undefined,w:st==='solo'?arc.tag:undefined,v:GAME_BUILD};};   // on the game's menu: anyone can join
 arc.busy=()=>!!net.role;
 arc.onChange=lobbyChanged;
 arc.onInvite=(from,p)=>{if(typeof onInvite==='function')onInvite(from,p.name,p);};
@@ -1374,9 +1393,11 @@ function invite(code){if(net.role!=='host')hostGame();arcInvite(code,GAME_ID,GAM
   const f=arc.friends.find(f=>f.code===code)||arc.everyone[code];say('Invite sent to '+((f&&f.name)||code)+'. Waiting for them to join…');}
 // what clicking a friend's name does in this game: {label, go()} or null
 function friendAction(f){
-  if(f.status==='offline')return null;
-  if((f.status==='hosting'||f.status==='idle')&&f.join&&!net.role)return f.game===GAME_ID?{label:'Join',go:()=>joinGame(f.join)}:{label:'Join in '+(f.gameName||'their game'),go:()=>arcGoPlay(f.game,{join:f.join})};
-  if(net.role==='guest'||f.status==='playing'||f.status==='full')return null;
+  if(f.status==='offline')return null;const gn=f.gameName||'their game';
+  if(f.held&&f.held.includes(arc.tag)&&f.join&&!net.role)return f.game===GAME_ID?{label:'Rejoin',go:()=>joinGame(f.join)}:{label:'Rejoin in '+gn,go:()=>arcGoPlay(f.game,{join:f.join})};   // your spot is still there
+  if((f.status==='hosting'||f.status==='idle')&&f.join&&!net.role)return f.game===GAME_ID?{label:'Join',go:()=>joinGame(f.join)}:{label:'Join in '+gn,go:()=>arcGoPlay(f.game,{join:f.join})};
+  if(f.w&&!net.role&&['solo','playing','full','watching'].includes(f.status))return f.game===GAME_ID?{label:'Watch',go:()=>watchGame(f.w)}:{label:'Watch in '+gn,go:()=>arcGoPlay(f.game,{watch:f.w})};
+  if(net.role==='guest'||f.status==='playing'||f.status==='full'||f.status==='watching')return null;
   return {label:f.invited?'Invite again':'Invite',go:()=>invite(f.code)};}
 // --- a link to one other player: a WebRTC data channel, or the relay, which looks the same to the code below ---
 function relayChannel(code,type){const ch={label:'relay',relay:true,readyState:'open',bufferedAmount:0,onopen:null,onclose:null,onmessage:null,
@@ -1389,7 +1410,7 @@ function newPC(code){const pc=new RTCPeerConnection(ICE);
     if(net.role==='guest'&&net.pc===pc&&(s==='failed'||s==='disconnected'))useRelay();   // the direct link broke: carry on through the relay
     if(net.role==='host'&&s==='failed'){const g=net.guests[code];if(g&&g.pc===pc&&!(g.ch&&g.ch.relay))setTimeout(()=>{const h=net.guests[code];if(h&&h.pc===pc&&!(h.ch&&h.ch.relay))dropPeer(code,'The connection to '+h.name+' was lost.');},QUIET_DROP);}};
   return pc;}
-function freeSlot(){const used=Object.values(net.guests).filter(g=>!g.upd).map(g=>g.slot);let slot=1;while(used.includes(slot))slot++;return slot;}
+function freeSlot(){const used=netPlayers().map(g=>g.slot).concat([net.own||0],Object.values(net.held).map(h=>h.slot));let slot=0;while(used.includes(slot))slot++;return slot;}
 async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
   try{
     if(p.rl!=null||p.rlBye){   // relay traffic
@@ -1397,20 +1418,23 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
       if(!ch||!ch.relay||ch.readyState!=='open')return;
       if(p.rlBye){ch.readyState='closed';if(ch.onclose)ch.onclose();}else if(ch.onmessage)ch.onmessage({data:p.rl});return;}
     if(p.refuse){if(net.role==='guest'&&from===net.host){say(p.refuse);leaveOnline();}return;}
-    if(p.bye){if(net.role==='guest'&&from===net.host){say('The host closed the game.');leaveOnline(true);}
+    if(p.bye){if(net.role==='guest'&&from===net.host){if(!netHandOver()){say('The host closed the game.');leaveOnline(true);}}
       else if(net.role==='host'&&net.guests[from])dropPeer(from,net.guests[from].name+' left the game.');return;}
     if(m.type==='OFFER'&&(p.sdp||p.relay)){   // someone wants to join my game
       if(p.game!==GAME_ID){send('ANSWER',from,{refuse:arc.name+' is playing a different game right now. Click their name in the Arcade to join them there.'});return;}
       if(net.role==='guest'){send('ANSWER',from,{refuse:arc.name+" is in someone else's game right now. Try again when they're back."});return;}
-      if(!net.role){if(gameStatus()!=='idle'){send('ANSWER',from,{refuse:arc.name+" is playing alone right now. You can join as soon as they're back on the menu."});return;}
-        hostGame();}   // they're on the game's menu: open their lobby for you, no need to host first
+      const back=net.role==='host'?net.held[from]:null,watch=!!p.watch&&!back;   // back: they left this game and are coming back to their spot
+      if(!net.role){if(!watch&&gameStatus()!=='idle'){send('ANSWER',from,{refuse:arc.name+" is playing alone right now. Click Watch to see their game, or join when they're back on the menu."});return;}
+        hostGame();}   // they're on the game's menu (or want to watch): open their lobby for you, no need to host first
+      else if(!watch&&!back&&!net.guests[from]&&gameStatus()==='playing'){send('ANSWER',from,{refuse:arc.name+" is in the middle of a game. Click Watch to see it, or join when they're back on the menu."});return;}
+      if(watch&&!net.guests[from]&&Object.values(net.guests).filter(g=>g.watch).length>=MAX_WATCH){send('ANSWER',from,{refuse:'Too many people are watching '+arc.name+"'s game right now. Try again in a little while."});return;}
       if(!p.v){send('ANSWER',from,{refuse:'Your copy of the game is too old. Open the Arcade at '+ARC_HOME+' to get the newest one.'});return;}
       if(p.relay){   // the direct link didn't work out: play through the relay instead
         if(p.v!==GAME_BUILD){send('ANSWER',from,{refuse:'You and '+arc.name+' have different versions of '+GAME_NAME+'. Both of you open it from '+ARC_HOME+' to get the same one.'});return;}
         let g=net.guests[from];if(g&&g.ch&&g.ch.readyState==='open'&&!g.ch.relay)return;
-        const slot=g&&!g.upd?g.slot:freeSlot();if(g){try{g.pc&&g.pc.close();}catch(e){}}
+        const slot=watch?-1:back?back.slot:g&&!g.upd?g.slot:freeSlot();if(g){try{g.pc&&g.pc.close();}catch(e){}}
         if(slot>=MAX_PLAYERS){delete net.guests[from];send('ANSWER',from,{refuse:arc.name+"'s game is full."});return;}
-        g={slot,name:p.name||from,cand:[],ch:null,pc:null};net.guests[from]=g;
+        g={slot,watch,back:!!back,name:p.name||from,cand:[],ch:null,pc:null};net.guests[from]=g;
         const ch=relayChannel(from,'ANSWER');wireGuestChannel(from,ch);send('ANSWER',from,{relayOk:1,slot,v:GAME_BUILD});ch.onopen();lobbyChanged();return;}
       if(net.guests[from]){const old=net.guests[from];if(old.ch&&old.ch.readyState==='open')return;try{old.pc&&old.pc.close();}catch(e){}delete net.guests[from];}   // they're trying again
       if(p.v!==GAME_BUILD){   // different copies: no game, just pass the newer one across
@@ -1420,9 +1444,9 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
         send('ANSWER',from,{sdp:g.pc.localDescription,slot:-1,v:GAME_BUILD,type:'data',connectionId:'gc'});
         for(const c of g.cand.splice(0))await g.pc.addIceCandidate(c);
         say(g.name+(p.v<GAME_BUILD?' has an older copy (version '+p.v+'). Sending them yours…':' has a newer copy (version '+p.v+'). Receiving it…'));return;}
-      const slot=freeSlot();
+      const slot=watch?-1:back?back.slot:freeSlot();
       if(slot>=MAX_PLAYERS){send('ANSWER',from,{refuse:arc.name+"'s game is full."});return;}
-      const g={slot,name:p.name||from,cand:[],ch:null};net.guests[from]=g;g.pc=newPC(from);
+      const g={slot,watch,back:!!back,name:p.name||from,cand:[],ch:null};net.guests[from]=g;g.pc=newPC(from);
       g.pc.ondatachannel=e=>{if(e.channel.label!=='file'&&net.guests[from]===g)wireGuestChannel(from,e.channel);};
       await g.pc.setRemoteDescription(p.sdp);const ans=await g.pc.createAnswer();await g.pc.setLocalDescription(ans);
       send('ANSWER',from,{sdp:g.pc.localDescription,slot,v:GAME_BUILD,type:'data',connectionId:'gc'});
@@ -1442,20 +1466,26 @@ async function onSignal(m){const p=m.payload||{},from=arcCode(m.src);
 function hostGame(){if(net.role)return;net.role='host';net.guests={};net.rc={};
   say('You are hosting. Click a name below to invite them.');arcPing();}
 function wireGuestChannel(code,ch){const g=net.guests[code];if(!g)return;g.ch=ch;const mine=()=>net.guests[code]===g&&g.ch===ch;
-  ch.onopen=()=>{if(!mine())return;g.last=Date.now();say(g.name+' joined as player '+(g.slot+1)+'.');lobbyChanged();};
+  ch.onopen=()=>{if(!mine())return;g.last=Date.now();if(g.back)delete net.held[code];say(g.watch?g.name+' is watching.':g.back?g.name+' is back in the game.':g.name+' joined as player '+(g.slot+1)+'.');lobbyChanged();};
   ch.onclose=()=>{if(mine())dropPeer(code,g.name+' left the game.');};
   ch.onmessage=e=>{if(!mine())return;g.last=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k==='in')hostInput(g.slot,m,code);};}
 function lobbyPlayers(){   // host: who is in, by player number
-  const out=[{slot:0,name:arc.name+' (you)'}];for(const c in net.guests){const g=net.guests[c];if(g.upd)continue;out.push({slot:g.slot,name:g.name,ready:!!(g.ch&&g.ch.readyState==='open')});}
+  const out=[{slot:net.own||0,name:arc.name+' (you)'}];for(const c in net.guests){const g=net.guests[c];if(g.upd||g.watch)continue;out.push({slot:g.slot,name:g.name,ready:!!(g.ch&&g.ch.readyState==='open')});}
+  for(const c in net.held)out.push({slot:net.held[c].slot,name:net.held[c].name+' (left, spot kept)',ready:false});
   return out.sort((a,b)=>a.slot-b.slot);}
 function startOnlineGame(){const n=Math.max(...lobbyPlayers().map(p=>p.slot))+1;startGame(n);}
 function hostInput(slot,m,code){const i=input[slot];if(!i)return;const gq=net.guests[code];if(gq&&m.q>(gq.aq||0))gq.aq=m.q;const rc=net.rc[code]=net.rc[code]||{};
   for(const a of ACTIONS){i[a]=!!(m.g&&m.g[a]);const n=(m.c&&m.c[a])||0;if(n>(rc[a]||0)){rc[a]=n;i[a+'P']=true;}}}
-function sendSnap(){let obj=null,full=null,parts=null;net.fr++;
+function netRoster(){const r=[[net.own||0,arc.tag,arc.name]];for(const c in net.guests){const g=net.guests[c];if(!g.upd&&!g.watch)r.push([g.slot,c,g.name]);}return r;}
+function sendSnap(){let obj=null,full=null,parts=null,fs=null;net.fr++;
+  const live=gameStatus()==='playing',canFs=live&&typeof fullState==='function';
   for(const c in net.guests){const g=net.guests[c],ch=g.ch;if(g.upd||!ch||ch.readyState!=='open'||ch.bufferedAmount>65536)continue;
+    if(canFs&&!g.watch&&(!(ch.fsAt>0)||net.fr-ch.fsAt>=(ch.relay?FS_EVERY_RELAY:FS_EVERY))){ch.fsAt=net.fr;   // what a player needs to carry the game on if the host leaves (first one straight away)
+      if(fs===null){try{fs=JSON.stringify({k:'f',d:fullState()});}catch(e){fs='';}if(fs.length>200000)fs='';}
+      if(fs)try{ch.send(fs);}catch(e){}}
     if(ch.relay&&net.fr%RELAY_EVERY)continue;   // the relay gets every second picture...
     if(!obj){const ak={},aq={};for(const k in net.guests){const h=net.guests[k];if(!h.upd){ak[h.slot]=net.rc[k]||{};aq[h.slot]=h.aq||0;}}   // which presses (and frames) each guest has had acted on
-      obj=Object.assign({k:'s',sq:++net.seq,ak,aq},packSnap());}
+      obj=Object.assign({k:'s',sq:++net.seq,ak,aq,ro:netRoster(),gs:live?1:0},packSnap());}
     if(ch.relay){   // ...and only the parts that changed (the relay delivers in order, so the guest can piece them together)
       if(!parts){parts={};for(const k in obj)if(k!=='k'&&k!=='sq')parts[k]=JSON.stringify(obj[k]);}
       const last=ch.lastParts;ch.sentN=(ch.sentN||0)+1;ch.lastParts=parts;
@@ -1466,38 +1496,61 @@ function sendSnap(){let obj=null,full=null,parts=null;net.fr++;
     full=full||JSON.stringify(obj);try{ch.send(full);}catch(e){}}}
 function anyGuests(){return Object.values(net.guests).some(g=>!g.upd&&g.ch&&g.ch.readyState==='open');}
 // --- guest ---
-function joinGame(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(net.role||code.length!==6)return;
+function watchGame(code){joinGame(code,true);}
+function joinGame(code,watch){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(net.role||code.length!==6)return;
   if(code===arc.tag){say("That's your own friend code. Type your friend's code instead.");return;}
-  if(!arc.ready){say('Connecting to the online service… joining as soon as it is ready.');const t=setInterval(()=>{if(arc.ready){clearInterval(t);joinGame(code);}},300);setTimeout(()=>clearInterval(t),15000);return;}
+  if(!arc.ready){say('Connecting to the online service… joining as soon as it is ready.');const t=setInterval(()=>{if(arc.ready){clearInterval(t);joinGame(code,watch);}},300);setTimeout(()=>clearInterval(t),15000);return;}
   if(!arcIsFriend(code))arcAddFriend(code);   // people you play with become friends, on both lists
-  net.role='guest';net.host=code;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};net.q=0;net.base=null;net.prevSnap=net.curSnap=null;net.ack=null;const f=arc.friends.find(f=>f.code===code);say('Connecting to '+((f&&f.name)||code)+'…');
+  net.role='guest';net.host=code;net.watch=!!watch;net.slot=watch?-1:0;net.fs=null;net.lastSeq=0;net.cand=[];net.gIn={};net.cnt={};net.q=0;net.base=null;net.prevSnap=net.curSnap=null;net.ack=null;
+  const f=arc.friends.find(f=>f.code===code)||arc.everyone[code];say('Connecting to '+((f&&f.name)||'your friend')+'…');
   const pc=newPC(code);net.pc=pc;
   wireHostLink(pc.createDataChannel('game',{ordered:false,maxRetransmits:0}));
   wireFile(pc.createDataChannel('file',{ordered:true}),null,()=>leaveOnline());
   (async()=>{try{const off=await pc.createOffer();await pc.setLocalDescription(off);
-    send('OFFER',code,{sdp:pc.localDescription,name:arc.name,v:GAME_BUILD,type:'data',connectionId:'gc',label:'game',serialization:'json',reliable:false});}catch(e){useRelay();}})();
+    send('OFFER',code,{sdp:pc.localDescription,name:arc.name,v:GAME_BUILD,watch:net.watch?1:0,type:'data',connectionId:'gc',label:'game',serialization:'json',reliable:false});}catch(e){useRelay();}})();
   setTimeout(()=>{if(net.role==='guest'&&net.host===code&&!(net.ch&&net.ch.readyState==='open'))useRelay();},RELAY_AFTER);
   setTimeout(()=>{if(net.role==='guest'&&net.host===code&&!(net.ch&&net.ch.readyState==='open')){say("Couldn't reach "+((f&&f.name)||code)+'. Check that they are hosting, then try again.');leaveOnline();}},JOIN_GIVEUP);}
 function useRelay(){if(net.role!=='guest'||net.upd||(net.ch&&net.ch.relay))return;
   if(net.ch&&net.ch.readyState==='open'&&net.pc&&net.pc.connectionState==='connected')return;
   net.relayAsk=(net.relayAsk||0)+1;if(net.relayAsk>3)return;
-  send('OFFER',net.host,{relay:1,name:arc.name,v:GAME_BUILD});}
+  send('OFFER',net.host,{relay:1,name:arc.name,v:GAME_BUILD,watch:net.watch?1:0});}
 function wireHostLink(ch){net.ch=ch;const mine=()=>net.ch===ch;
-  ch.onopen=()=>{if(!mine())return;net.lastHeard=Date.now();if(net.peerBuild!==GAME_BUILD){net.upd=true;return;}say('Connected! You are player '+(net.slot+1)+'.');lobbyChanged();};
+  ch.onopen=()=>{if(!mine())return;net.lastHeard=Date.now();if(net.peerBuild!==GAME_BUILD){net.upd=true;return;}say(net.watch?'Connected! You are watching.':'Connected! You are player '+(net.slot+1)+'.');lobbyChanged();};
   ch.onclose=()=>{if(!mine())return;if(net.role==='guest'&&!net.upd){if(!ch.relay&&net.pc){useRelay();   // the direct link dropped: try the relay, and give up if that doesn't answer
-      setTimeout(()=>{if(net.role==='guest'&&!net.upd&&!(net.ch&&net.ch.readyState==='open')){say('Lost the connection to the host.');leaveOnline();}},8000);return;}
-    say('The host closed the game.');leaveOnline();}};
-  ch.onmessage=e=>{if(!mine())return;net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}if(m.k!=='s'||m.sq<=net.lastSeq)return;
+      setTimeout(()=>{if(net.role==='guest'&&!net.upd&&!(net.ch&&net.ch.readyState==='open')&&!netHandOver()){say('Lost the connection to the host.');leaveOnline();}},8000);return;}
+    if(!netHandOver()){say('The host closed the game.');leaveOnline();}}};
+  ch.onmessage=e=>{if(!mine())return;net.lastHeard=Date.now();let m;try{m=JSON.parse(e.data);}catch(err){return;}
+    if(m.k==='f'){net.fs=m.d;return;}   // the full game, in case the host leaves
+    if(m.k!=='s'||m.sq<=net.lastSeq)return;
     if(m.d){if(!net.base)return;const x=m._x;m=Object.assign({},net.base,m);delete m.d;delete m._x;if(x)for(const k of x)delete m[k];}
     net.base=m;net.lastSeq=m.sq;net.ack=(m.ak&&m.ak[net.slot])||null;
     net.prevSnap=net.curSnap;net.prevAt=net.curAt;net.curSnap=m;net.curAt=performance.now();net.smDone=false;net.snap=m;};}
-function guestKey(a,down){const g=net.gIn;if(down&&!g[a])net.cnt[a]=(net.cnt[a]||0)+1;g[a]=down?1:0;sendInput();}
-function sendInput(){if(net.ch&&net.ch.readyState==='open')try{net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt,q:net.q}));}catch(e){}}
+function guestKey(a,down){if(net.watch)return;const g=net.gIn;if(down&&!g[a])net.cnt[a]=(net.cnt[a]||0)+1;g[a]=down?1:0;sendInput();}
+function sendInput(){if(!net.watch&&net.ch&&net.ch.readyState==='open')try{net.ch.send(JSON.stringify({k:'in',g:net.gIn,c:net.cnt,q:net.q}));}catch(e){}}
 setInterval(()=>{if(net.role==='guest')sendInput();},100);
 setInterval(()=>{const now=Date.now();   // someone closed their game without saying goodbye
-  if(net.role==='host')for(const c in net.guests){const g=net.guests[c];if(!g.upd&&g.ch&&g.ch.readyState==='open'&&now-(g.last||now)>QUIET_DROP)dropPeer(c,g.name+' left the game.');}
+  if(net.role==='host'){for(const c in net.guests){const g=net.guests[c];if(!g.upd&&g.ch&&g.ch.readyState==='open'&&now-(g.last||now)>QUIET_DROP)dropPeer(c,g.name+' left the game.');}
+    for(const c in net.held)if(net.held[c].until<now){delete net.held[c];lobbyChanged();}}   // a spot is kept for HOLD_MS
   if(net.role==='guest'&&!net.upd&&net.ch&&net.ch.readyState==='open'){const q=now-(net.lastHeard||now);
-    if(q>2500&&!net.ch.relay)useRelay();if(q>QUIET_DROP){say('Lost the connection to the host.');leaveOnline();}}},1000);
+    if(q>2500&&!net.ch.relay)useRelay();if(q>QUIET_DROP&&!netHandOver()){say('Lost the connection to the host.');leaveOnline();}}},1000);
+// the host left in the middle of a game: the remaining player with the lowest number carries it on, the others follow
+function netHandOver(){const s=net.curSnap;
+  if(net.role!=='guest'||net.upd||!s||!s.gs||!Array.isArray(s.ro)||typeof loadFullState!=='function')return false;
+  const left=net.host,hostRow=s.ro.find(r=>r[1]===left),hostName=(hostRow&&hostRow[2])||'The host',rest=s.ro.filter(r=>r[1]!==left).sort((a,b)=>a[0]-b[0]);
+  if(!rest.length)return false;const next=rest[0];
+  if(net.watch||next[1]!==arc.tag){   // someone else carries it on: go to their game
+    if(net.watch&&next[1]===arc.tag)return false;const code=next[1],watch=net.watch;leaveOnline(true);
+    say(hostName+' left. '+next[2]+' is carrying the game on…');
+    const go=()=>{if(!net.role)joinGame(code,watch);};setTimeout(go,1500);setTimeout(()=>{if(net.role==='guest'&&!(net.ch&&net.ch.readyState==='open')){leaveOnline(true);go();}},7000);return true;}
+  if(!net.fs)return false;
+  const fs=net.fs,ch=net.ch,pc=net.pc;net.ch=null;net.pc=null;try{ch&&ch.close();}catch(e){}try{pc&&pc.close();}catch(e){}
+  const mine=net.slot,until=Date.now()+HOLD_MS;
+  Object.assign(net,{role:'host',host:null,guests:{},rc:{},pc:null,ch:null,cand:[],snap:null,prevSnap:null,curSnap:null,base:null,own:mine,held:{},relayAsk:0,fs:null,
+    seq:Math.max(net.seq,net.lastSeq)});
+  for(const r of s.ro)if(r[1]!==arc.tag)net.held[r[1]]={slot:r[0],name:r[2],until};   // everyone else (the host too) can come back to their spot
+  try{loadFullState(fs);}catch(e){console.warn('hand-over',e);leaveOnline(true);say(hostName+' left, and the game could not carry on.');return true;}
+  for(const i of input)if(i)for(const a of ACTIONS){i[a]=false;i[a+'P']=false;}
+  say(hostName+' left, so the game moved to you. Keep playing!');lobbyChanged();arcPing();return true;}
 function guestFrame(){const sm=typeof SNAP_SMOOTH!=='undefined'?SNAP_SMOOTH:null;
   if(sm&&net.prevSnap&&net.curSnap){if(net.smDone)return;   // glide from the last snapshot to the newest over the time between them
     const span=Math.min(250,Math.max(12,net.curAt-net.prevAt)),t=Math.min(1,(performance.now()-net.curAt)/span);
@@ -1549,23 +1602,27 @@ async function saveUpdate(){   // call from a button click: the browser only all
   }catch(err){if(err&&err.name!=='AbortError')say("Couldn't save it: "+err.message);return false;}}
 // --- leaving ---
 function dropPeer(code,msg){if(net.role==='host'){const g=net.guests[code];if(!g)return;try{g.ch&&g.ch.close();}catch(e){}try{g.pc&&g.pc.close();}catch(e){}
-    delete net.guests[code];const i=input[g.slot];if(i)for(const a of ACTIONS)i[a]=false;if(msg)say(msg);}
+    delete net.guests[code];const i=input[g.slot];if(i)for(const a of ACTIONS)i[a]=false;
+    if(!g.upd&&!g.watch&&gameStatus()==='playing'){net.held[code]={slot:g.slot,name:g.name,until:Date.now()+HOLD_MS};   // keep their spot for a while
+      if(msg)msg=g.name+' left the game. Their spot is kept for 2 minutes in case they come back.';}
+    if(msg)say(msg);lobbyChanged();}
   else if(net.role==='guest'){say(msg);leaveOnline();}}
 function leaveOnline(quiet){
   if(!quiet){if(net.role==='host')for(const c in net.guests)send('ANSWER',c,{bye:1});if(net.role==='guest'&&net.host)send('OFFER',net.host,{bye:1});}   // say goodbye
   if(net.role==='host')for(const c in net.guests){const g=net.guests[c];delete net.guests[c];try{g.ch&&g.ch.close();}catch(e){}try{g.pc&&g.pc.close();}catch(e){}}
   if(net.role==='guest'){const ch=net.ch,pc=net.pc;net.ch=null;net.pc=null;try{ch&&ch.close();}catch(e){}try{pc&&pc.close();}catch(e){}}
   if(net.role==='host'&&/^(You are hosting|Invite sent to)/.test(net.msg))net.msg='';   // no longer true once you stop hosting
-  Object.assign(net,{role:null,host:null,guests:{},pc:null,ch:null,cand:[],snap:null,upd:false,peerBuild:null,relayAsk:0});lobbyChanged();}
+  Object.assign(net,{role:null,host:null,guests:{},pc:null,ch:null,cand:[],snap:null,upd:false,peerBuild:null,relayAsk:0,own:0,held:{},watch:false,fs:null,slot:0});lobbyChanged();}
 // --- the Arcade: start-up requests and the way back ---
 const ARCADE_URL=ARC_QS.get('arcade')||arcArcadeUrl();
 function backToArcade(){leaveOnline();arcStop();const b=ARC_QS.get('broker');location.href=ARCADE_URL+(b?'?broker='+encodeURIComponent(b):'')+arcHandoff();}
 window.addEventListener('pagehide',()=>{leaveOnline();arcStop();});
 arcStart();
-{const j=ARC_QS.get('join'),h=ARC_QS.get('host'),iv=ARC_QS.get('invite');
+{const j=ARC_QS.get('join'),h=ARC_QS.get('host'),iv=ARC_QS.get('invite'),w=ARC_QS.get('watch');
   const whenReady=f=>{const t=setInterval(()=>{if(arc.ready){clearInterval(t);f();}},200);};
-  if(j)whenReady(()=>joinGame(j));else if(h)whenReady(()=>{hostGame();if(iv)invite(iv);});}
+  if(j)whenReady(()=>joinGame(j));else if(w)whenReady(()=>watchGame(w));else if(h)whenReady(()=>{hostGame();if(iv)invite(iv);});}
 /* ===== end of ARCADE ONLINE PLAY v2 ===== */
+if(ARC_QS.get('test'))window.__ev=c=>eval(c);   // tests only: run code inside the game
 
 // a preview (opened from Claude, not from the arcade site or the Game Arcade folder) has no Arcade page to go back to,
 // so the Arcade button and Quit say so instead of opening a page that isn't there
@@ -1583,7 +1640,7 @@ const netdlg=document.getElementById('netdlg'),netMsg=document.getElementById('n
 let autoClose=false,connAt=0;
 function openOnline(auto){autoClose=!!auto;netdlg.hidden=false;renderNet();}
 function closeNet(){if(!netdlg.classList.contains('docked'))netdlg.hidden=true;try{cv.focus({preventScroll:true});}catch(e){}}   // docked beside the game: it stays
-function setNetTitle(){document.getElementById('win-title').textContent=GAME_NAME+(net.role==='host'&&anyGuests()?' — Online (you are Player 1)':net.role==='guest'&&net.ch&&net.ch.readyState==='open'?' — Online (you are Player '+(net.slot+1)+')':'');}
+function setNetTitle(){document.getElementById('win-title').textContent=GAME_NAME+(net.role==='host'&&anyGuests()?' — Online (you are Player '+(netMe()+1)+')':net.role==='guest'&&net.ch&&net.ch.readyState==='open'?(net.watch?' — Watching':' — Online (you are Player '+(net.slot+1)+')'):'');}
 function renderNet(){
   setNetTitle();if(netdlg.hidden)return;
   netMsg.textContent=net.msg||(!arc.ready?(arcStatusLine()||arcConnNote()):
@@ -1619,10 +1676,10 @@ function renderNet(){
   document.getElementById('net-inv').hidden=net.role==='guest';
   const hb=document.getElementById('net-host');hb.hidden=true;   // no need to host: your game is open whenever you're on its menu
   document.getElementById('cmd-leave').hidden=!net.role;
-  document.getElementById('win-title').textContent=GAME_NAME+(net.role==='host'&&anyGuests()?' — Online (you are Player 1)':net.role==='guest'&&net.ch&&net.ch.readyState==='open'?' — Online (you are Player '+(net.slot+1)+')':'');}
+  document.getElementById('win-title').textContent=GAME_NAME+(net.role==='host'&&anyGuests()?' — Online (you are Player '+(netMe()+1)+')':net.role==='guest'&&net.ch&&net.ch.readyState==='open'?(net.watch?' — Watching':' — Online (you are Player '+(net.slot+1)+')'):'');}
 let lastNg=0,wasLive=false;
 function onLobbyChange(){
-  const ng=net.role==='host'?Object.values(net.guests).filter(g=>!g.upd&&g.ch&&g.ch.readyState==='open').length:0;if(ng>lastNg)netdlg.hidden=false;lastNg=ng;   // someone joined your lobby: show who's in
+  const ng=net.role==='host'?Object.values(net.guests).filter(g=>!g.upd&&!g.watch&&g.ch&&g.ch.readyState==='open').length:0;if(ng>lastNg)netdlg.hidden=false;lastNg=ng;   // someone joined your lobby: show who's in
   const live=net.role==='guest'&&net.ch&&net.ch.readyState==='open';
   if(live&&!connAt){connAt=Date.now();autoClose=true;}if(live)wasLive=true;else if(wasLive&&!net.role){wasLive=false;netdlg.hidden=false;toTitle();}if(!live)connAt=0;
   renderNet();}
@@ -1707,7 +1764,7 @@ const KEYMAP={KeyA:[0,'left'],KeyD:[0,'right'],KeyS:[0,'down'],KeyW:[0,'up'],Key
   Numpad4:[1,'left'],Numpad6:[1,'right'],Numpad2:[1,'down'],Numpad8:[1,'up']};
 const ALSO_ROT={Space:'rotR',Enter:'rotR',NumpadEnter:'rotR'};   // Space / Enter also turn the pair during play
 function clearHeld(){for(let i=0;i<2;i++)input[i]=mkIn();}
-function who(slot){if(net.role==='host')return 0;return gmode==='vs'&&(state==='vssel'||state==='play'||state==='vsover')?slot:0;}
+function who(slot){if(net.role==='host')return netMe();return gmode==='vs'&&(state==='vssel'||state==='play'||state==='vsover')?slot:0;}
 function press(i,a){const k=input[i];if(!k[a]){k[a]=true;k[a+'P']=true;}}
 function release(i,a){input[i][a]=false;}
 function togglePause(){if(state!=='play'||net.role==='guest')return;paused=!paused;clearHeld();updatePauseLabel();}
@@ -1758,15 +1815,15 @@ cv.addEventListener('pointerdown',e=>{ensureAudio();try{cv.focus({preventScroll:
   if(state==='menu'||state==='scenmenu'){const i=menuHit(x,y);if(i>=0){if(state==='menu')menuPick(i);else scenPick(i);}return;}
   if(paused){togglePause();return;}
   if(state==='vssel'&&!net.role){const side=x>=160?1:0;const ly=Math.floor((y-68)/17);if(ly>=0&&ly<5&&!vsReady[side]){vsLevel[side]=ly;sfx('move');return;}press(side,'start');return;}
-  if(state!=='play')press(0,'start');});
+  if(state!=='play')press(netMe(),'start');});
 // touch pad
 document.querySelectorAll('.pbtn').forEach(btn=>{const act=btn.dataset.act;
   btn.addEventListener('pointerdown',e=>{e.preventDefault();ensureAudio();
     if(guestLive()){if(act!=='pause')guestKey(act,true);btn.classList.add('active');try{btn.setPointerCapture(e.pointerId);}catch(err){}return;}
     if(act==='pause'){togglePause();return;}
     if(state==='title'||state==='menu'||state==='scenmenu'){if(act==='left')menuNav(-1);else if(act==='right'||act==='down')menuNav(1);else if(act==='rotR'||act==='rotL')menuOk();return;}
-    if(paused)togglePause();press(0,act);if(state!=='play'&&act==='rotR')press(0,'start');btn.classList.add('active');try{btn.setPointerCapture(e.pointerId);}catch(err){}});
-  const off=()=>{if(net.role==='guest'){if(act!=='pause')guestKey(act,false);}else if(act!=='pause')release(0,act);btn.classList.remove('active');};
+    if(paused)togglePause();press(netMe(),act);if(state!=='play'&&act==='rotR')press(netMe(),'start');btn.classList.add('active');try{btn.setPointerCapture(e.pointerId);}catch(err){}});
+  const off=()=>{if(net.role==='guest'){if(act!=='pause')guestKey(act,false);}else if(act!=='pause')release(netMe(),act);btn.classList.remove('active');};
   ['pointerup','pointercancel','lostpointercapture'].forEach(t=>btn.addEventListener(t,off));
   btn.addEventListener('contextmenu',e=>e.preventDefault());});
 // game controllers: pad 1 -> player 1, pad 2 -> player 2. Stick / d-pad moves, A turns clockwise, B anticlockwise, Start starts.
