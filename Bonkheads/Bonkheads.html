@@ -1129,7 +1129,7 @@ function updatePest(e){e.t++;e.anim++;const PE=PESTS[e.kind];const drowsy=drowsy
     e.vy=Math.min(maxFall(),e.vy+grav());const r=moveBody(e,8,20,e.vx,0);if(r.side)e.vx=-e.vx;
     if(e.vy>0){const rr=moveBody(e,8,20,0,e.vy);if(rr.down){e.vy=0;e.vx=0;if(e.wake){e.st='walk';e.t=0;e.angry=Math.min(5,e.angry+1);}else{e.st='down';e.t=0;}}}
     else{const rr=moveBody(e,8,20,0,e.vy);if(rr.up)e.vy=0;}break;}
-  case 'down':{const dt=P.down*MD().down*(drowsyT>0?1.6:1);if(!onGroundAt(e.x,e.y,6)){e.st='fly';e.vy=0;e.vx=0;break;}
+  case 'down':{const dt=P.down*MD().down*(drowsyT>0?1.6:1);if(!onGroundAt(e.x,e.y,8)){e.st='fly';e.vy=0;e.vx=0;break;}   // same footprint it lands with (moveBody hw 8), or a pest on a ledge edge flips between fly and down every frame
     if(e.t>dt){e.st='walk';e.t=0;e.angry=Math.min(5,e.angry+1);e.dir=rnd()<0.5?-1:1;sfx('wake');}break;}
   case 'kick':{e.vy+=grav()*0.55;e.x+=e.vx;e.y+=e.vy;if(e.y>PFH+60||e.x<-80||e.x>W+80)e.dead=true;break;}
   case 'still':break;
