@@ -19,28 +19,28 @@ a DICOM file (CT, MRI or X-ray); the camera only tells the app where your arm is
 ## Phase 0: browser MVP (built, in `web/`)
 
 Runs in Safari, Chrome or any modern browser. No install, files never leave the device.
+The user loads a scan and points the camera at the arm. Nothing else to set.
 
 | Piece | State |
 | --- | --- |
-| DICOM reader (implicit/explicit little endian, uncompressed, baseline JPEG, multi-frame, zip) | Working, tested on the bundled samples |
-| Slice viewer: pinch zoom, pan, slice scrub, window/level presets | Working |
-| 3D viewer: bone / muscle / skin surfaces, rotate, zoom, layer toggles, opacity | Working |
-| X-ray vision: camera feed with the scan drawn on top | Working with manual placement |
-| Follow my arm (on by default): hand tracking pins the scan to the wrist, turns and scales it | Written, **not yet tried on a real camera** |
-| Fine tuning: twist, slide along the arm, size, flip ends, mirror for the other arm | Working |
+| DICOM reader (implicit/explicit little endian, uncompressed, baseline JPEG, multi-frame, zip) | Working |
+| Automatic scan analysis: finds the hand, wrist, forearm direction and thumb side from the bones | Working on the demo arm CT; needs real arm scans |
+| X-ray vision: full-screen camera, anatomy drawn inside the arm's own outline, fading into real skin at the edges | Working with real hand tracking on test photos; **needs an on-phone test** |
+| Follows a bent wrist by finding the forearm in the camera picture | Working on test photos |
+| 3D view (bone / muscle / skin) and slice view (pinch, zoom, presets) | Working |
 
-How tracking works today: MediaPipe finds 21 hand landmarks. The wrist landmark fixes
-the position, the knuckles give the direction and rotation of the hand, and the known
-size of a hand gives the scale. The forearm is assumed to continue straight back from
-the hand.
+How it lines up with no user input: the hand tracker finds the wrist, the hand's direction
+and its real size (an adult hand is about 92 mm from wrist to middle knuckle). The scan's
+wrist, forearm direction and thumb side are worked out from its bones when it loads. The
+forearm direction in the camera picture comes from the skin-coloured area behind the wrist.
 
-Known gaps in the MVP:
+Known gaps:
 
-1. Compressed scans (JPEG-LS, JPEG 2000, JPEG lossless, RLE) are detected but not
-   decoded. Many hospital discs use these.
-2. Enhanced multi-frame CT/MR keeps its geometry in nested groups that are not read yet.
-3. Tracking needs the hand in view and assumes a straight wrist.
-4. Large scans are down-sampled for 3D to protect phone memory.
+1. Only hand / wrist / forearm scans get X-ray vision; other body parts open in 3D or Slices.
+2. Compressed scans (JPEG-LS, JPEG 2000, JPEG lossless, RLE) are not decoded yet. Many
+   hospital discs use these.
+3. A flat X-ray assumes the fingers point toward the top of the picture.
+4. Twisting the forearm moves the overlay with the hand, but the bones on screen keep the scan's pose.
 
 ## Phase 1: make the browser version solid (about 1 to 2 weeks)
 

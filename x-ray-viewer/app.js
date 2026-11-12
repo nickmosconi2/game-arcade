@@ -1,28 +1,31 @@
-// X-ray Viewer MVP: DICOM slices, 3D surfaces, and a camera overlay that follows the hand.
+// X-ray Viewer: load a DICOM scan, point the camera at your arm, see inside it.
 import * as THREE from './vendor/three.module.min.js';
 import { parseDicom, decodeFrame, unzip, isZip, DicomError } from './dicom.js';
-import { groupSeries, buildVolume, smooth, surfaceNets, otsu } from './volume.js';
+import { groupSeries, buildVolume, smooth, surfaceNets, otsu, analyzeLimb, peelSkin } from './volume.js';
 
 const $ = (id) => document.getElementById(id);
 const stage = $('stage'), video = $('video'), c2d = $('c2d'), c3d = $('c3d');
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const nextFrame = () => new Promise((r) => setTimeout(r, 0));
+const HAND_MM = 92;            // adult wrist-to-middle-knuckle distance, used to judge real-world size
+const OTHER_PARTS = /LEG|KNEE|ANKLE|FOOT|TIBIA|FIBULA|FEMUR|HIP|PELVIS|CHEST|THORAX|ABDOMEN|SPINE|HEAD|SKULL|BRAIN|NECK|SHOULDER|TOE|HEEL|CALCANEUS|WHOLE ?BODY/i;
 
 const state = {
-  series: [], cur: null, mode: '2d',
+  series: [], cur: null, mode: 'cam',
   slice: 0, wc: 40, ww: 400, sliceCache: null,
   view2d: { zoom: 1, x: 0, y: 0 },
-  layers: [], opacity: 1,
-  anat: null,            // {kind, min, max, long, length, width}
-  flip: false, mirror: false, roll: 0, slide: 0, size: 1,
-  follow: true, tracked: false, lastSeen: 0,
+  kind: null,                  // 'volume' | 'image'
+  frame: null,                 // how the scan sits in a standard pose: {R, wrist, center, length, width}
+  trackable: false, whyNot: '',
+  show: { bone: true, muscle: true, skin: false },
   orbit: new THREE.Quaternion(), zoom3d: 1, pan3d: new THREE.Vector2(),
-  manual: { x: 0, y: 0, angle: 0, scale: 0 },
-  camOn: false, tracker: null, trackerState: 'off',
+  camOn: false, camError: '', source: null, testSource: null,
+  tracker: null, trackerState: 'off',
+  tracked: false, lastSeen: 0, fade: 0, forearm: null,
 };
 
 // ---------- loading ----------
-function busy(text) { $('busy').classList.toggle('hidden', !text); if (text) $('busyText').textContent = text; }
+function busy(text) { state.loading = !!text; $('busy').classList.toggle('hidden', !text); if (text) $('busyText').textContent = text; }
 
 async function loadBuffers(items) {
   $('err').textContent = '';
@@ -43,10 +46,6 @@ async function loadBuffers(items) {
       throw new DicomError(why || 'No DICOM images found in those files.');
     }
     state.series = groupSeries(files);
-    const sel = $('seriesSel');
-    sel.innerHTML = '';
-    state.series.forEach((s, i) => sel.add(new Option(`${s.modality} · ${s.slices.length} img · ${s.description}`.slice(0, 60), i)));
-    sel.hidden = state.series.length < 2;
     await openSeries(0);
     $('sheet').classList.add('hidden');
     $('closeSheet').hidden = false;
@@ -73,57 +72,61 @@ async function openSeries(i) {
   if (isCT && s.isVolume) { state.wc = 300; state.ww = 1500; }
   else if (Number.isFinite(f.windowCenter) && f.windowWidth > 0) { state.wc = f.windowCenter; state.ww = f.windowWidth; }
   else { state.wc = (lo + hi) / 2; state.ww = Math.max(1, hi - lo); }
-  setupWindowControls();
+  setupPresets();
   $('title').textContent = s.description || 'Scan';
-  const mm = s.spacingKnown ? '' : ' · size estimated';
-  $('subtitle').textContent = `${s.modality} · ${s.columns}×${s.rows}${s.slices.length > 1 ? ` · ${s.slices.length} slices` : ''}${mm}`;
   $('slice').max = s.slices.length - 1; $('slice').value = state.slice;
   $('sliceRow').style.display = s.slices.length > 1 ? '' : 'none';
 
-  // 3D content
   clearAnatomy();
-  state.flip = false; state.mirror = false; state.roll = 0; state.slide = 0; state.size = 1;
-  state.orbit.identity(); state.zoom3d = 1; state.pan3d.set(0, 0); state.manual.scale = 0; state.tracked = false;
+  state.orbit.identity(); state.zoom3d = 1; state.pan3d.set(0, 0);
+  state.tracked = false; state.fade = 0; state.forearm = null;
+  const words = `${f.bodyPart || ''} ${f.studyDescription || ''} ${f.seriesDescription || ''}`;
+  const otherPart = OTHER_PARTS.test(words);
   if (s.isVolume) {
     let vol = await buildVolume(s, async (p) => { busy(`Building 3D… ${Math.round(p * 100)}%`); await nextFrame(); });
-    busy('Building surfaces…'); await nextFrame();
+    busy('Finding bone and muscle…'); await nextFrame();
     vol = smooth(vol);
-    const defs = isCT
-      ? [{ name: 'Bone', iso: 250, color: 0xf3ecdc, opacity: 1, on: true },
-         { name: 'Muscle', iso: 10, color: 0xc0453c, opacity: 0.42, on: true },
-         { name: 'Skin', iso: -300, color: 0xe2b594, opacity: 0.22, on: false }]
-      : (() => { const t = otsu(vol.data); return [{ name: 'Surface', iso: t, color: 0xe2b594, opacity: 0.55, on: true }]; })();
-    for (const d of defs) { addSurface(vol, d); await nextFrame(); }
-    finishAnatomy('volume');
+    const bodyIso = isCT ? -300 : otsu(vol.data), boneIso = isCT ? 250 : null;
+    addSurface('skin', vol, bodyIso); await nextFrame();
+    if (isCT) {
+      addSurface('bone', vol, boneIso); await nextFrame();
+      addSurface('muscle', peelSkin(vol, bodyIso, 3.5), 10); await nextFrame();
+    }
+    const limb = analyzeLimb(vol, bodyIso, boneIso);
+    state.kind = 'volume';
+    state.frame = volumeFrame(limb);
+    state.trackable = !!limb && limb.maxWidth < 170 && limb.length > 100 && !otherPart;
+    state.whyNot = 'Automatic X-ray vision works for hand, wrist and forearm scans so far. Use 3D or Slices for this one.';
   } else {
-    addImagePlane(s, px);
-    finishAnatomy('image');
+    addFilm(s, px);
+    state.kind = 'image';
+    state.frame = filmFrame(s, px);
+    state.trackable = !otherPart;
+    state.whyNot = 'Automatic X-ray vision works for hand, wrist and forearm scans so far. Use Slices for this one.';
   }
-  syncControls();
-  setMode(state.mode);
+  state.show = { bone: true, muscle: true, skin: false };
+  buildLayerChips();
+  setMode(state.trackable ? 'cam' : state.kind === 'volume' ? '3d' : '2d');
   busy('');
 }
 
 // ---------- 2D slice view ----------
 const off = document.createElement('canvas');
-function setupWindowControls() {
+function setupPresets() {
   const s = state.cur, [lo, hi] = s.range, span = hi - lo;
-  $('wc').min = lo; $('wc').max = hi; $('wc').step = span / 500; $('wc').value = state.wc;
-  $('ww').min = span / 500; $('ww').max = span * 1.2; $('ww').step = span / 500; $('ww').value = state.ww;
   const presets = s.modality === 'CT'
     ? [['Bone', 300, 1500], ['Soft tissue', 40, 400], ['Lung', -600, 1500]]
-    : [['Auto', (lo + hi) / 2, span], ['Bright', lo + span * 0.3, span * 0.6], ['Contrast', lo + span * 0.5, span * 0.5]];
+    : [['Auto', state.wc, state.ww], ['Brighter', lo + span * 0.3, span * 0.6], ['More contrast', lo + span * 0.5, span * 0.5]];
   const box = $('presets'); box.innerHTML = '';
-  for (const [name, c, w] of presets) {
-    const b = document.createElement('button'); b.textContent = name;
-    b.onclick = () => { state.wc = c; state.ww = w; $('wc').value = c; $('ww').value = w; windowChanged(true); };
+  presets.forEach(([name, c, w], i) => {
+    const b = document.createElement('button'); b.textContent = name; b.classList.toggle('on', i === 0);
+    b.onclick = () => {
+      state.wc = c; state.ww = w;
+      for (const o of box.children) o.classList.toggle('on', o === b);
+      draw2d(); refreshFilmTexture();
+    };
     box.append(b);
-  }
-}
-function windowChanged(final) {
-  $('wcOut').textContent = Math.round(state.wc); $('wwOut').textContent = Math.round(state.ww);
-  draw2d();
-  if (final && state.anat && state.anat.kind === 'image') refreshImageTexture();
+  });
 }
 async function getSlice() {
   const s = state.cur, i = state.slice;
@@ -132,15 +135,15 @@ async function getSlice() {
   state.sliceCache = { i, s, px };
   return px;
 }
-function grayscale(px, s, out, alphaFromBrightness) {
+function grayscale(px, s, out, glow) {
   const lo = state.wc - state.ww / 2, k = 255 / state.ww, inv = s.first.inverted;
   for (let i = 0, j = 0; i < px.length; i++, j += 4) {
     let v = (px[i] - lo) * k;
     v = v < 0 ? 0 : v > 255 ? 255 : v;
     if (inv) v = 255 - v;
-    if (alphaFromBrightness) {
-      // Camera overlay: dark film is see-through, dense bone is solid.
-      out[j] = 200 + v * 0.2; out[j + 1] = 225 + v * 0.11; out[j + 2] = 255; out[j + 3] = Math.pow(v / 255, 1.3) * 255;
+    if (glow) {
+      // Camera overlay: empty film is see-through, dense bone glows.
+      out[j] = 205 + v * 0.2; out[j + 1] = 228 + v * 0.1; out[j + 2] = 255; out[j + 3] = Math.pow(v / 255, 1.25) * 255;
     } else { out[j] = out[j + 1] = out[j + 2] = v; out[j + 3] = 255; }
   }
 }
@@ -160,10 +163,10 @@ async function draw2d() {
     const ctx = c2d.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c2d.width, c2d.height);
     const wmm = s.columns * s.spacing[0], hmm = s.rows * s.spacing[1];
-    const fit = Math.min(W / wmm, (H - 190) / hmm) * state.view2d.zoom;
+    const fit = Math.min(W / wmm, (H - 170) / hmm) * state.view2d.zoom;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(off, W / 2 + state.view2d.x - wmm * fit / 2, (H - 130) / 2 + state.view2d.y - hmm * fit / 2, wmm * fit, hmm * fit);
+    ctx.drawImage(off, W / 2 + state.view2d.x - wmm * fit / 2, (H - 40) / 2 + state.view2d.y - hmm * fit / 2, wmm * fit, hmm * fit);
     $('sliceOut').textContent = `${state.slice + 1}/${s.slices.length}`;
   } finally {
     drawing = false;
@@ -174,171 +177,332 @@ async function draw2d() {
 // ---------- 3D scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas: c3d, alpha: true, antialias: true });
 renderer.setClearColor(0x000000, 0);
+renderer.autoClear = false;
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 20000);
 camera.position.z = 10000;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.1));
-const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(0.4, 0.6, 1); scene.add(sun);
-const pose = new THREE.Group(), adjust = new THREE.Group(), anatomy = new THREE.Group();
+const pose = new THREE.Group(), anatomy = new THREE.Group();
 anatomy.matrixAutoUpdate = false;
-scene.add(pose); pose.add(adjust); adjust.add(anatomy);
-let imageTexture = null, imageCanvas = null, imageSource = null;
+scene.add(pose); pose.add(anatomy);
+const maskTarget = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: true });
+const meshes = {};   // skin, bone, muscle, film
+let filmTexture = null, filmCanvas = null, filmSource = null;
+
+// Shared uniforms: the "window" mask is the arm's own silhouette, soft at the edges,
+// so anatomy shows inside the arm and the real skin from the camera remains around it.
+const shared = {
+  uMask: { value: maskTarget.texture }, uRes: { value: new THREE.Vector2(1, 1) },
+  uUseMask: { value: 0 }, uFade: { value: 1 },
+  uAxis: { value: new THREE.Vector3(0, 0, 1) }, uSide: { value: new THREE.Vector3(1, 0, 0) },
+  uSpan: { value: new THREE.Vector2(-1e6, 1e6) },   // where the scan starts and ends along the arm, in mm
+};
+const VERT = `
+varying vec3 vN; varying vec3 vP;
+void main() { vN = normalize(normalMatrix * normal); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const HEAD = `
+precision highp float;
+uniform sampler2D uMask; uniform vec2 uRes; uniform float uUseMask; uniform float uFade;
+uniform vec3 uAxis; uniform vec3 uSide; uniform vec2 uSpan;
+varying vec3 vN; varying vec3 vP;
+const vec3 LIGHT = vec3(0.37, 0.56, 0.74);
+float windowAt() { return uUseMask > 0.5 ? texture2D(uMask, gl_FragCoord.xy / uRes).r : 1.0; }
+vec3 facing() { vec3 n = normalize(vN); return gl_FrontFacing ? n : -n; }`;
+const material = (body, opts) => new THREE.ShaderMaterial({ uniforms: shared, vertexShader: VERT, fragmentShader: HEAD + body, transparent: true, ...opts });
+const mats = {
+  // 1 in the middle of the arm, falling to 0 toward its outline and toward the ends of the scan.
+  mask: new THREE.ShaderMaterial({
+    uniforms: shared, vertexShader: VERT,
+    fragmentShader: HEAD + `
+void main() {
+  float t = dot(vP, uAxis);
+  float ends = smoothstep(0.0, 30.0, t - uSpan.x) * smoothstep(0.0, 30.0, uSpan.y - t);
+  float w = smoothstep(0.22, 0.93, abs(normalize(vN).z)) * ends;
+  gl_FragColor = vec4(w, w, w, 1.0);
+}`,
+  }),
+  // Camera view: the cut edge of skin and fat fading into the dark interior. 3D view: a faint skin shell.
+  skin: material(`
+void main() {
+  vec3 n = facing();
+  if (uUseMask > 0.5) {
+    float w = windowAt();
+    vec3 c = mix(vec3(0.80, 0.50, 0.42), vec3(0.90, 0.70, 0.42), smoothstep(0.10, 0.32, w));
+    c = mix(c, vec3(0.36, 0.05, 0.06), smoothstep(0.30, 0.62, w));
+    gl_FragColor = vec4(c, smoothstep(0.0, 0.55, w) * 0.96 * uFade);
+  } else {
+    float rim = pow(1.0 - abs(n.z), 2.0);
+    gl_FragColor = vec4(vec3(0.90, 0.70, 0.60) * (0.6 + 0.4 * max(dot(n, LIGHT), 0.0)), (0.10 + 0.55 * rim) * uFade);
+  }
+}`, { depthWrite: false, depthTest: false }),
+  bone: material(`
+void main() {
+  vec3 n = facing();
+  float d = max(dot(n, LIGHT), 0.0), rim = pow(1.0 - abs(n.z), 2.0);
+  float spec = pow(max(reflect(-LIGHT, n).z, 0.0), 28.0);
+  vec3 c = vec3(0.94, 0.91, 0.81) * (0.36 + 0.74 * d) - rim * vec3(0.26, 0.24, 0.18) + spec * 0.22;
+  gl_FragColor = vec4(c, smoothstep(0.10, 0.60, windowAt()) * uFade);
+}`, { side: THREE.DoubleSide }),
+  muscle: material(`
+void main() {
+  vec3 n = facing();
+  float d = max(dot(n, LIGHT), 0.0), fres = pow(1.0 - abs(n.z), 1.5);
+  float s = dot(vP, uSide) * 1.5 + sin(dot(vP, uAxis) * 0.045) * 3.0;
+  float fibre = 0.84 + 0.12 * sin(s) + 0.05 * sin(s * 3.7 + 1.3);
+  float spec = pow(max(reflect(-LIGHT, n).z, 0.0), 22.0);
+  vec3 c = vec3(0.78, 0.17, 0.14) * (0.40 + 0.80 * d) * fibre + spec * 0.30;
+  gl_FragColor = vec4(c, mix(0.34, 0.95, fres) * smoothstep(0.12, 0.62, windowAt()) * uFade);
+}`, { depthWrite: false }),
+};
 
 function clearAnatomy() {
-  for (const c of [...anatomy.children]) { anatomy.remove(c); c.geometry.dispose(); c.material.dispose(); }
-  if (imageTexture) { imageTexture.dispose(); imageTexture = null; }
-  state.layers = []; state.anat = null;
+  for (const c of [...anatomy.children]) { anatomy.remove(c); c.geometry.dispose(); }
+  for (const k of Object.keys(meshes)) delete meshes[k];
+  if (filmTexture) { filmTexture.dispose(); filmTexture = null; }
+  filmSource = null; state.frame = null; state.kind = null;
 }
-function addSurface(vol, def) {
-  const m = surfaceNets(vol, def.iso);
+function addSurface(name, vol, iso) {
+  const m = surfaceNets(vol, iso);
   if (m.indices.length < 12) return;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
   geo.setIndex(new THREE.BufferAttribute(m.indices, 1));
   geo.computeVertexNormals(); geo.computeBoundingBox();
-  const solid = def.opacity >= 1;
-  const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.65, metalness: 0, transparent: true, opacity: def.opacity, depthWrite: solid, side: solid ? THREE.FrontSide : THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = solid ? 0 : def.opacity > 0.3 ? 1 : 2;
-  mesh.visible = def.on;
+  const mesh = new THREE.Mesh(geo, mats[name]);
+  mesh.renderOrder = { skin: 0, bone: 1, muscle: 2 }[name];
   anatomy.add(mesh);
-  state.layers.push({ ...def, mesh });
+  meshes[name] = mesh;
 }
-function addImagePlane(s, px) {
+function addFilm(s, px) {
   const w = s.columns * s.spacing[0], h = s.rows * s.spacing[1];
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, w, 0, 0, w, h, 0, 0, h, 0]), 3));
   geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]), 2));
   geo.setIndex([0, 2, 1, 0, 3, 2]); geo.computeBoundingBox();
-  // Texture is capped at 1024 px on the long side to keep phones comfortable.
-  const k = Math.min(1, 1024 / Math.max(s.columns, s.rows));
-  imageCanvas = document.createElement('canvas');
-  imageCanvas.width = Math.round(s.columns * k); imageCanvas.height = Math.round(s.rows * k);
-  imageSource = { s, px };
-  imageTexture = new THREE.CanvasTexture(imageCanvas);
-  imageTexture.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.MeshBasicMaterial({ map: imageTexture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-  const mesh = new THREE.Mesh(geo, mat);
+  const k = Math.min(1, 1024 / Math.max(s.columns, s.rows));   // texture capped at 1024 px for phones
+  filmCanvas = document.createElement('canvas');
+  filmCanvas.width = Math.round(s.columns * k); filmCanvas.height = Math.round(s.rows * k);
+  filmSource = { s, px };
+  filmTexture = new THREE.CanvasTexture(filmCanvas);
+  filmTexture.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: filmTexture, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
   anatomy.add(mesh);
-  state.layers.push({ name: 'X-ray', opacity: 1, on: true, mesh });
-  refreshImageTexture();
+  meshes.film = mesh;
+  refreshFilmTexture();
 }
-function refreshImageTexture() {
-  if (!imageSource) return;
-  const { s, px } = imageSource;
+function refreshFilmTexture() {
+  if (!filmSource) return;
+  const { s, px } = filmSource;
   const full = document.createElement('canvas'); full.width = s.columns; full.height = s.rows;
   const fctx = full.getContext('2d'), img = fctx.createImageData(s.columns, s.rows);
   grayscale(px, s, img.data, true);
   fctx.putImageData(img, 0, 0);
-  const ctx = imageCanvas.getContext('2d');
-  ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-  ctx.drawImage(full, 0, 0, imageCanvas.width, imageCanvas.height);
-  imageTexture.needsUpdate = true;
-}
-function finishAnatomy(kind) {
-  if (!state.layers.length) return;
-  const all = new THREE.Box3();
-  for (const l of state.layers) all.union(l.mesh.geometry.boundingBox);
-  const size = all.getSize(new THREE.Vector3()).toArray();
-  let long = size.indexOf(Math.max(...size));
-  if (kind === 'image') long = size[0] > size[1] ? 0 : 1;
-  const cross = size.filter((_, i) => i !== long);
-  state.anat = { kind, min: all.min.toArray(), max: all.max.toArray(), long, length: size[long], width: Math.max(...cross) };
-  updateAnatomyMatrix();
-  buildLayerChips();
-}
-/** Places the scan in a standard frame: long axis along Y; in camera mode the wrist end sits at the origin. */
-function updateAnatomyMatrix() {
-  const a = state.anat; if (!a) return;
-  const cam = state.mode === 'cam';
-  const c = [0, 1, 2].map((i) => (a.min[i] + a.max[i]) / 2);
-  const anchor = c.slice();
-  const R = new THREE.Matrix4();
-  if (a.kind === 'image') {
-    // Image rows run top-to-bottom; turn the sheet over so it reads upright and faces the camera.
-    if (a.long === 1) {
-      if (cam) anchor[1] = state.flip ? a.max[1] : a.min[1];
-      R.set(state.flip ? -1 : 1, 0, 0, 0, 0, state.flip ? 1 : -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1);
-    } else {
-      if (cam) anchor[0] = state.flip ? a.min[0] : a.max[0];
-      const k = state.flip ? -1 : 1;
-      R.set(0, k, 0, 0, k, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1);
-    }
-  } else {
-    // Rotate so the long axis becomes "z", then stand it up along Y.
-    const perm = a.long === 0 ? [1, 2, 0] : a.long === 1 ? [2, 0, 1] : [0, 1, 2]; // rows: which source axis feeds x', y', z'
-    const P = new THREE.Matrix4(); const e = P.elements; e.fill(0); e[15] = 1;
-    perm.forEach((srcAxis, row) => { e[srcAxis * 4 + row] = 1; });
-    const U = new THREE.Matrix4();
-    if (state.flip) U.set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-    else U.set(1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1);
-    R.multiplyMatrices(U, P);
-    if (cam) anchor[a.long] = state.flip ? a.min[a.long] : a.max[a.long];
+  const ctx = filmCanvas.getContext('2d');
+  ctx.clearRect(0, 0, filmCanvas.width, filmCanvas.height);
+  ctx.drawImage(full, 0, 0, filmCanvas.width, filmCanvas.height);
+  // Feather the borders so the film melts into the camera picture instead of ending in a hard rectangle.
+  const W = filmCanvas.width, H = filmCanvas.height, m = Math.round(Math.min(W, H) * 0.12);
+  ctx.globalCompositeOperation = 'destination-out';
+  for (const [x0, y0, x1, y1, rx, ry, rw, rh] of [[0, 0, m, 0, 0, 0, m, H], [W, 0, W - m, 0, W - m, 0, m, H], [0, 0, 0, m, 0, 0, W, m], [0, H, 0, H - m, 0, H - m, W, m]]) {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(rx, ry, rw, rh);
   }
-  anatomy.matrix.copy(R).multiply(new THREE.Matrix4().makeTranslation(-anchor[0], -anchor[1], -anchor[2]));
+  ctx.globalCompositeOperation = 'source-over';
+  filmTexture.needsUpdate = true;
+}
+
+/** Standard pose for a 3D scan: Y toward the fingers, X toward the thumb, origin at the wrist. */
+function volumeFrame(limb) {
+  const box = new THREE.Box3();
+  for (const m of Object.values(meshes)) box.union(m.geometry.boundingBox);
+  const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  let y, x;
+  const useLimb = limb && limb.maxWidth < 170;
+  if (useLimb) {
+    y = new THREE.Vector3(...limb.distal);
+    x = limb.thumb ? new THREE.Vector3(...limb.thumb) : new THREE.Vector3(1, 0, 0);
+  } else {
+    const long = size.toArray().indexOf(Math.max(size.x, size.y, size.z));
+    y = new THREE.Vector3().setComponent(long, 1);                 // head end up for a body scan
+    x = new THREE.Vector3().setComponent(long === 0 ? 1 : 0, 1);   // patient's left on the viewer's right
+  }
+  x.addScaledVector(y, -x.dot(y)).normalize();
+  const z = new THREE.Vector3().crossVectors(x, y);
+  shared.uAxis.value.copy(y); shared.uSide.value.copy(x);
+  let lo = Infinity, hi = -Infinity;
+  const pos = (meshes.skin || Object.values(meshes)[0]).geometry.attributes.position.array;
+  for (let i = 0; i < pos.length; i += 3) { const t = pos[i] * y.x + pos[i + 1] * y.y + pos[i + 2] * y.z; if (t < lo) lo = t; if (t > hi) hi = t; }
+  shared.uSpan.value.set(lo, hi);
+  const length = useLimb ? limb.length : Math.max(size.x, size.y, size.z);
+  const sorted = size.toArray().sort((a, b) => a - b);
+  return { R: new THREE.Matrix4().makeBasis(x, y, z), wrist: useLimb ? new THREE.Vector3(...limb.wrist) : center.clone(), center, length, width: sorted[1] };
+}
+/** Standard pose for a flat film: fingers assumed toward the top of the picture; wrist = narrowest part. */
+function filmFrame(s, px) {
+  const w = s.columns * s.spacing[0], h = s.rows * s.spacing[1];
+  const tall = h >= w, nLong = tall ? s.rows : s.columns, nShort = tall ? s.columns : s.rows;
+  const lo = state.wc - state.ww / 2, inv = s.first.inverted;
+  const step = Math.max(1, Math.floor(nLong / 200)), widths = [];
+  for (let k = 0; k < nLong; k += step) {
+    let n = 0;
+    for (let j = 0; j < nShort; j += 2) {
+      let v = (px[tall ? k * s.columns + j : j * s.columns + k] - lo) / state.ww;
+      if (inv) v = 1 - v;
+      if (v > 0.12) n++;
+    }
+    widths.push(n);
+  }
+  const sm = widths.map((_, i) => { let t = 0, c = 0; for (let j = -3; j <= 3; j++) if (widths[i + j] !== undefined) { t += widths[i + j]; c++; } return t / c; });
+  const a = Math.floor(sm.length * 0.12), b = Math.ceil(sm.length * 0.88);
+  let best = -1, bestW = Infinity;
+  for (let i = a; i < b; i++) if (sm[i] < bestW) { bestW = sm[i]; best = i; }
+  const before = Math.max(...sm.slice(0, best)), after = Math.max(...sm.slice(best + 1));
+  const frac = best >= 0 && bestW < 0.9 * before && bestW < 0.9 * after ? (best + 0.5) / sm.length : 0.1;
+  const along = frac * (tall ? h : w) + (tall ? -8 : 8);
+  const wrist = tall ? new THREE.Vector3(w / 2, along, 0) : new THREE.Vector3(along, h / 2, 0);
+  // Picture rows run downward, so turn the sheet over to stand it upright facing the viewer.
+  const y = tall ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(-1, 0, 0);
+  const x = tall ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, -1, 0);
+  const z = new THREE.Vector3().crossVectors(x, y);
+  return { R: new THREE.Matrix4().makeBasis(x, y, z), wrist, center: new THREE.Vector3(w / 2, h / 2, 0), length: Math.max(w, h), width: Math.min(w, h) };
+}
+function updateAnatomyMatrix() {
+  const f = state.frame; if (!f) return;
+  const o = state.mode === 'cam' ? f.wrist : f.center;
+  anatomy.matrix.copy(f.R).transpose().multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z));
   anatomy.matrixWorldNeedsUpdate = true;
 }
 function buildLayerChips() {
   const box = $('layers'); box.innerHTML = '';
-  for (const l of state.layers) {
-    const b = document.createElement('button'); b.textContent = l.name; b.classList.toggle('on', l.on);
-    b.onclick = () => { l.on = !l.on; l.mesh.visible = l.on; b.classList.toggle('on', l.on); };
+  for (const [key, label] of [['bone', 'Bone'], ['muscle', 'Muscle'], ['skin', 'Skin']]) {
+    if (!meshes[key]) continue;
+    const b = document.createElement('button'); b.textContent = label; b.classList.toggle('on', state.show[key]);
+    b.onclick = () => { state.show[key] = !state.show[key]; b.classList.toggle('on', state.show[key]); };
     box.append(b);
   }
-  applyOpacity();
+  $('layerBtn').textContent = state.show.muscle ? 'Bones only' : 'Show muscle';
 }
-function applyOpacity() {
-  for (const l of state.layers) {
-    const o = l.opacity * state.opacity;
-    l.mesh.material.opacity = o;
-    if (l.mesh.material.isMeshStandardMaterial) l.mesh.material.depthWrite = o > 0.95;
-  }
-  $('opacityOut').textContent = `${Math.round(state.opacity * 100)}%`;
-}
-
 function resize3d() {
   const W = stage.clientWidth, H = stage.clientHeight;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(W, H, false);
+  const buf = renderer.getDrawingBufferSize(new THREE.Vector2());
+  shared.uRes.value.copy(buf);
+  maskTarget.setSize(Math.max(2, buf.x >> 1), Math.max(2, buf.y >> 1));
   camera.left = -W / 2; camera.right = W / 2; camera.top = H / 2; camera.bottom = -H / 2;
   camera.updateProjectionMatrix();
 }
-const usableHeight = () => stage.clientHeight - 190;
-function fitScale() {
-  const a = state.anat; if (!a) return 1;
-  return Math.min(usableHeight() * 0.92 / a.length, stage.clientWidth * 0.9 / Math.max(a.width, 1));
-}
 
-// ---------- hand tracking → overlay pose ----------
+// ---------- hand tracking → where the arm is ----------
 const targetPos = new THREE.Vector3(), targetQuat = new THREE.Quaternion();
 let targetScale = 1;
-/** Convert a MediaPipe hand (image + world landmarks) into where the wrist is, how the hand is turned, and px per mm. */
-export function poseFromHand(hand, W, H, vw, vh) {
-  const cover = Math.max(W / vw, H / vh), dw = vw * cover, dh = vh * cover, ox = (W - dw) / 2, oy = (H - dh) / 2;
-  const px = (i) => [ox + hand.image[i].x * dw, oy + hand.image[i].y * dh];
+const sample = document.createElement('canvas');
+const sampleCtx = sample.getContext('2d', { willReadFrequently: true });
+
+/** Maps a point in the camera picture (0..1) to screen pixels, matching object-fit: cover. */
+function coverMap(W, H, sw, sh) {
+  const k = Math.max(W / sw, H / sh), dw = sw * k, dh = sh * k, ox = (W - dw) / 2, oy = (H - dh) / 2;
+  return (p) => [ox + p.x * dw, oy + p.y * dh];
+}
+/** Wrist position, hand orientation and real-world scale from the 21 hand landmarks. */
+function poseFromHand(hand, W, H, sw, sh) {
+  const map = coverMap(W, H, sw, sh);
   const w3 = (i) => new THREE.Vector3(hand.world[i].x, -hand.world[i].y, -hand.world[i].z);
-  // Scale: compare on-screen distances with the same distances in metres.
   let num = 0, den = 0;
   for (const [a, b] of [[0, 5], [0, 17], [5, 17], [0, 9], [0, 13], [5, 13]]) {
-    const pa = px(a), pb = px(b), wa = hand.world[a], wb = hand.world[b];
+    const pa = map(hand.image[a]), pb = map(hand.image[b]), wa = hand.world[a], wb = hand.world[b];
     num += Math.hypot(pa[0] - pb[0], pa[1] - pb[1]);
     den += Math.hypot(wa.x - wb.x, wa.y - wb.y);
   }
-  if (den < 0.01) return null;
+  if (den < 0.005) return null;
   const wrist = w3(0);
-  const y = w3(9).sub(wrist).normalize();              // toward the fingers
-  const t = w3(5).sub(w3(17));                          // pinky side → thumb side
-  const x = t.sub(y.clone().multiplyScalar(t.dot(y))).normalize();
+  const y = w3(9).sub(wrist);                           // toward the fingers
+  const unitsPerMm = y.length() / HAND_MM;              // the model's units are not exact metres
+  y.normalize();
+  const t = w3(5).sub(w3(17));                          // little-finger side → thumb side
+  const x = t.addScaledVector(y, -t.dot(y)).normalize();
   const z = new THREE.Vector3().crossVectors(x, y);
-  const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-  const p = px(0);
-  return { x: p[0] - W / 2, y: H / 2 - p[1], quat: q, pxPerMm: num / den / 1000 };
+  const p = map(hand.image[0]);
+  return { x: p[0] - W / 2, y: H / 2 - p[1], quat: new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)), pxPerMm: (num / den) * unitsPerMm };
 }
-function applyHand(hand) {
+/**
+ * Looks at the camera picture behind the wrist for skin of the same colour as the palm and
+ * returns the direction the forearm runs in (picture coordinates), or null if it is not clear.
+ */
+function findForearm(hand, source, sw, sh) {
+  const k = 128 / Math.max(sw, sh), w = Math.max(8, Math.round(sw * k)), h = Math.max(8, Math.round(sh * k));
+  if (sample.width !== w || sample.height !== h) { sample.width = w; sample.height = h; }
+  sampleCtx.drawImage(source, 0, 0, w, h);
+  let img;
+  try { img = sampleCtx.getImageData(0, 0, w, h).data; } catch { return null; }
+  const pt = (i) => [hand.image[i].x * w, hand.image[i].y * h];
+  const wrist = pt(0), mid = pt(9);
+  const hl = Math.hypot(mid[0] - wrist[0], mid[1] - wrist[1]);
+  if (hl < 5) return null;
+  const d = [(mid[0] - wrist[0]) / hl, (mid[1] - wrist[1]) / hl];
+  // Reference skin colour from the middle of the palm.
+  let r0 = 0, g0 = 0, b0 = 0, n0 = 0;
+  for (const [a, b, c] of [[0, 5, 17], [0, 9, 9], [0, 5, 9], [0, 13, 17], [5, 17, 0]]) {
+    const A = pt(a), B = pt(b), C = pt(c), x = Math.round((A[0] + B[0] + C[0]) / 3), y = Math.round((A[1] + B[1] + C[1]) / 3);
+    if (x < 0 || y < 0 || x >= w || y >= h) continue;
+    const i = (y * w + x) * 4; r0 += img[i]; g0 += img[i + 1]; b0 += img[i + 2]; n0++;
+  }
+  if (!n0) return null;
+  r0 /= n0; g0 /= n0; b0 /= n0;
+  const cb0 = -0.169 * r0 - 0.331 * g0 + 0.5 * b0, cr0 = 0.5 * r0 - 0.419 * g0 - 0.081 * b0, y0 = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
+  const scan = (axis, band) => {
+    let sx = 0, sy = 0, hits = 0, total = 0;
+    const R = 2.0 * hl, x0 = Math.max(0, Math.floor(wrist[0] - R)), x1 = Math.min(w - 1, Math.ceil(wrist[0] + R));
+    const yA = Math.max(0, Math.floor(wrist[1] - R)), yB = Math.min(h - 1, Math.ceil(wrist[1] + R));
+    for (let yy = yA; yy <= yB; yy++) for (let xx = x0; xx <= x1; xx++) {
+      const vx = xx - wrist[0], vy = yy - wrist[1], r = Math.hypot(vx, vy);
+      if (r < 0.5 * hl || r > R) continue;
+      const along = vx * axis[0] + vy * axis[1];
+      if (along < 0.15 * hl) continue;
+      if (band && Math.abs(vx * axis[1] - vy * axis[0]) > band * hl) continue;
+      total++;
+      const i = (yy * w + xx) * 4, rr = img[i], gg = img[i + 1], bb = img[i + 2];
+      const yv = 0.299 * rr + 0.587 * gg + 0.114 * bb;
+      if (Math.abs(-0.169 * rr - 0.331 * gg + 0.5 * bb - cb0) < 13 && Math.abs(0.5 * rr - 0.419 * gg - 0.081 * bb - cr0) < 13 && yv > 0.35 * y0 && yv < 1.9 * y0) { hits++; sx += vx; sy += vy; }
+    }
+    const len = Math.hypot(sx, sy);
+    return { dir: len ? [sx / len, sy / len] : null, hits, frac: total ? hits / total : 0 };
+  };
+  const back = [-d[0], -d[1]];
+  const first = scan(back, 0);
+  // Too little skin: sleeve or arm out of view. Too much: the background is skin-coloured.
+  if (!first.dir || first.hits < 25 || first.frac < 0.08 || first.frac > 0.62) return null;
+  const second = scan(first.dir, 0.75);
+  const f = second.dir && second.hits >= 20 ? second.dir : first.dir;
+  if (f[0] * back[0] + f[1] * back[1] < 0.55) return null;   // more than ~55° from straight: not believable
+  return f;
+}
+function applyHand(hand, source) {
   const W = stage.clientWidth, H = stage.clientHeight;
-  const r = poseFromHand(hand, W, H, video.videoWidth || W, video.videoHeight || H);
+  const sw = source.videoWidth || source.width || W, sh = source.videoHeight || source.height || H;
+  const r = poseFromHand(hand, W, H, sw, sh);
   if (!r) return;
-  targetPos.set(r.x, r.y, 0); targetQuat.copy(r.quat); targetScale = r.pxPerMm;
+  const q = r.quat;
+  if (state.kind === 'image') {
+    // A film has no back: keep its picture side toward the camera.
+    const z = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    if (z.z < 0) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+  }
+  // Bent wrist: swing the scan so it runs along the forearm seen in the picture, not just along the hand.
+  const f = findForearm(hand, source, sw, sh);
+  if (f) {
+    const v = new THREE.Vector2(f[0], -f[1]);
+    if (!state.forearm) state.forearm = v; else state.forearm.lerp(v, 0.3).normalize();
+  } else state.forearm = null;
+  if (state.forearm) {
+    const a = new THREE.Vector3(0, -1, 0).applyQuaternion(q);
+    const len = Math.hypot(a.x, a.y);
+    if (len > 0.35) {
+      const delta = Math.atan2(a.x * state.forearm.y - a.y * state.forearm.x, a.x * state.forearm.x + a.y * state.forearm.y);
+      q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), delta));
+    }
+  }
+  targetPos.set(r.x, r.y, 0); targetQuat.copy(q); targetScale = r.pxPerMm;
   if (!state.tracked) { pose.position.copy(targetPos); pose.quaternion.copy(targetQuat); pose.scale.setScalar(targetScale); }
   state.tracked = true; state.lastSeen = performance.now();
 }
@@ -352,110 +516,105 @@ async function ensureTracker() {
   } catch (e) { console.error(e); state.trackerState = 'failed'; }
 }
 async function startCamera() {
+  if (state.testSource) { state.source = state.testSource; state.camOn = true; return; }
   if (state.camOn) return;
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error(window.isSecureContext ? 'no camera access in this browser' : 'the page must be opened over https');
     const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
     video.srcObject = stream;
     await video.play();
-    state.camOn = true; state.camError = '';
+    state.source = video; state.camOn = true; state.camError = '';
   } catch (e) {
-    state.camError = e.name === 'NotAllowedError' ? 'Camera permission was refused, or this page is embedded where the camera is blocked.' : `Camera unavailable: ${e.message}`;
+    state.camError = e.name === 'NotAllowedError' ? 'Camera access was refused. Allow the camera for this site, then reload.' : `Camera unavailable: ${e.message}`;
   }
 }
-function statusText() {
-  if (state.mode !== 'cam') return '';
-  if (state.camError) return `${state.camError} You can still position the overlay by hand.`;
+function stopCamera() {
+  if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; }
+  state.camOn = false; state.tracked = false; state.fade = 0;
+}
+function hintText() {
+  if (state.mode !== 'cam' || !state.cur) return '';
+  if (!state.trackable) return state.whyNot;
+  if (state.camError) return state.camError;
   if (!state.camOn) return 'Starting camera…';
-  if (!state.follow) return 'Drag to move · pinch to resize · twist with two fingers';
-  if (state.trackerState === 'loading') return 'Loading hand tracking…';
-  if (state.trackerState === 'failed') return 'Hand tracking could not load. Turn off Follow to place it by hand.';
-  if (!state.tracked || performance.now() - state.lastSeen > 1200) return 'Show your hand and forearm to the camera';
+  if (state.trackerState === 'loading') return 'Getting ready…';
+  if (state.trackerState === 'failed') return 'Tracking could not start on this device.';
+  if (!state.tracked || performance.now() - state.lastSeen > 900) return 'Point the camera at your hand and forearm';
   return '';
 }
 
-function tick() {
-  requestAnimationFrame(tick);
-  if (state.mode === '2d' || !state.anat) return;
-  const W = stage.clientWidth, H = stage.clientHeight;
-  if (state.mode === '3d') {
-    pose.position.set(state.pan3d.x, 65 + state.pan3d.y, 0);
-    pose.quaternion.copy(state.orbit);
-    pose.scale.setScalar(fitScale() * state.zoom3d);
-    adjust.position.set(0, 0, 0); adjust.rotation.set(0, 0, 0); adjust.scale.set(1, 1, 1);
-  } else {
-    if (state.follow && state.tracker && state.camOn) {
-      const hand = state.tracker.detect(video);
-      if (hand) applyHand(hand);
-    }
-    if (state.follow && state.tracked) {
-      pose.position.lerp(targetPos, 0.4); pose.quaternion.slerp(targetQuat, 0.35);
-      pose.scale.setScalar(pose.scale.x + (targetScale - pose.scale.x) * 0.25);
-    } else {
-      const m = state.manual;
-      if (!m.scale) { m.scale = fitScale() * 0.9; m.x = 0; m.y = 65 + state.anat.length * m.scale / 2; m.angle = 0; }
-      pose.position.set(m.x, m.y, 0);
-      pose.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), m.angle);
-      pose.scale.setScalar(m.scale);
-    }
-    adjust.rotation.set(0, THREE.MathUtils.degToRad(state.roll), 0);
-    adjust.position.set(0, state.slide, 0);
-    adjust.scale.set(state.mirror ? -state.size : state.size, state.size, state.size);
+function drawAnatomy(cam) {
+  renderer.setRenderTarget(null);
+  renderer.clear();
+  if (!state.frame) return;
+  const { skin, bone, muscle, film } = meshes;
+  shared.uUseMask.value = cam && skin ? 1 : 0;
+  if (cam && skin) {
+    // Pass 1: the arm's silhouette, soft at the edges, into the mask.
+    if (bone) bone.visible = false; if (muscle) muscle.visible = false;
+    skin.visible = true; skin.material = mats.mask;
+    renderer.setRenderTarget(maskTarget);
+    renderer.setClearColor(0x000000, 1); renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 0);
+    skin.material = mats.skin;
   }
-  const t = statusText();
-  if ($('statusText').textContent !== t) $('statusText').textContent = t;
+  if (skin) skin.visible = cam || state.show.skin;
+  if (bone) bone.visible = cam || state.show.bone;
+  if (muscle) muscle.visible = state.show.muscle;
+  if (film) film.material.opacity = shared.uFade.value;
   renderer.render(scene, camera);
+}
+
+async function tick() {
+  try {
+    if (state.mode === '3d' && state.frame) {
+      const f = state.frame, W = stage.clientWidth, H = stage.clientHeight;
+      pose.position.set(state.pan3d.x, state.pan3d.y - 10, 0);
+      pose.quaternion.copy(state.orbit);
+      pose.scale.setScalar(Math.min((H - 190) / f.length, W * 0.86 / Math.max(f.width, 1)) * state.zoom3d);
+      shared.uFade.value = 1;
+      drawAnatomy(false);
+    } else if (state.mode === 'cam' && state.frame) {
+      if (state.trackable && state.tracker && state.camOn && !state.loading) {
+        const hand = await state.tracker.detect(state.source);
+        if (hand) applyHand(hand, state.source);
+      }
+      const live = state.tracked && performance.now() - state.lastSeen < 400;
+      state.fade += ((live ? 1 : 0) - state.fade) * (live ? 0.25 : 0.12);
+      if (state.tracked) {
+        pose.position.lerp(targetPos, 0.5); pose.quaternion.slerp(targetQuat, 0.4);
+        pose.scale.setScalar(pose.scale.x + (targetScale - pose.scale.x) * 0.3);
+      }
+      shared.uFade.value = state.fade;
+      if (state.fade > 0.01) drawAnatomy(true); else { renderer.setRenderTarget(null); renderer.clear(); }
+    }
+    const t = hintText();
+    if ($('hintText').textContent !== t && t) $('hintText').textContent = t;
+    $('hint').classList.toggle('off', !t);
+  } catch (e) { console.error(e); }
+  requestAnimationFrame(tick);
 }
 
 // ---------- modes & controls ----------
 function setMode(mode) {
   state.mode = mode;
-  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.mode === mode);
-  for (const c of document.querySelectorAll('.ctl')) c.style.display = c.dataset.for.split(' ').includes(mode) ? 'block' : 'none';
+  for (const b of document.querySelectorAll('#modes button')) b.classList.toggle('on', b.dataset.mode === mode);
+  for (const c of document.querySelectorAll('#panel > div')) c.style.display = c.dataset.for === mode ? 'block' : 'none';
+  $('panel').style.display = mode === 'cam' ? 'none' : 'block';
+  $('layerBtn').style.display = mode === 'cam' && state.trackable && meshes.muscle ? 'block' : 'none';
   c2d.style.display = mode === '2d' ? 'block' : 'none';
   c3d.style.display = mode === '2d' ? 'none' : 'block';
-  video.style.display = mode === 'cam' ? 'block' : 'none';
-  $('statusText').textContent = '';
+  video.style.display = mode === 'cam' && !state.testSource ? 'block' : 'none';
+  if (state.testSource) state.testSource.style.display = mode === 'cam' ? 'block' : 'none';
   updateAnatomyMatrix();
   if (mode === '2d') draw2d(); else resize3d();
-  if (mode === 'cam') { startCamera(); if (state.follow) ensureTracker(); }
-  else if (state.camOn) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; state.camOn = false; state.tracked = false; }
+  if (mode === 'cam') { startCamera(); if (state.trackable) ensureTracker(); }
+  else stopCamera();
 }
-function syncControls() {
-  $('roll').value = state.roll; $('rollOut').textContent = `${state.roll}°`;
-  $('slide').value = state.slide; $('slideOut').textContent = `${state.slide} mm`;
-  $('size').value = state.size * 100; $('sizeOut').textContent = `${Math.round(state.size * 100)}%`;
-  $('opacity').value = state.opacity * 100;
-  $('followBtn').classList.toggle('on', state.follow);
-  $('flipBtn').classList.toggle('on', state.flip);
-  $('mirrorBtn').classList.toggle('on', state.mirror);
-  $('wcOut').textContent = Math.round(state.wc); $('wwOut').textContent = Math.round(state.ww);
-  applyOpacity();
-}
-for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => state.cur && setMode(b.dataset.mode);
+for (const b of document.querySelectorAll('#modes button')) b.onclick = () => state.cur && setMode(b.dataset.mode);
 $('slice').oninput = (e) => { state.slice = +e.target.value; draw2d(); };
-$('wc').oninput = (e) => { state.wc = +e.target.value; windowChanged(false); };
-$('ww').oninput = (e) => { state.ww = +e.target.value; windowChanged(false); };
-$('wc').onchange = $('ww').onchange = () => windowChanged(true);
-$('opacity').oninput = (e) => { state.opacity = e.target.value / 100; applyOpacity(); };
-$('roll').oninput = (e) => { state.roll = +e.target.value; syncControls(); };
-$('slide').oninput = (e) => { state.slide = +e.target.value; syncControls(); };
-$('size').oninput = (e) => { state.size = e.target.value / 100; syncControls(); };
-$('followBtn').onclick = () => {
-  state.follow = !state.follow;
-  if (state.follow) ensureTracker();
-  else if (state.tracked) {
-    // Keep the overlay where tracking left it so it can be nudged by hand.
-    const e = new THREE.Euler().setFromQuaternion(pose.quaternion, 'ZXY');
-    Object.assign(state.manual, { x: pose.position.x, y: pose.position.y, angle: e.z, scale: pose.scale.x });
-  }
-  state.tracked = false; syncControls();
-};
-$('flipBtn').onclick = () => { state.flip = !state.flip; updateAnatomyMatrix(); syncControls(); };
-$('mirrorBtn').onclick = () => { state.mirror = !state.mirror; syncControls(); };
-$('resetBtn').onclick = () => { state.roll = 0; state.slide = 0; state.size = 1; state.manual.scale = 0; state.mirror = false; syncControls(); };
-$('panelToggle').onclick = () => { const closed = $('panel').classList.toggle('closed'); $('panelToggle').textContent = closed ? '▴ controls' : '▾ controls'; };
-$('seriesSel').onchange = (e) => openSeries(+e.target.value);
+$('layerBtn').onclick = () => { state.show.muscle = !state.show.muscle; buildLayerChips(); };
 $('openBtn').onclick = () => $('sheet').classList.remove('hidden');
 $('closeSheet').onclick = () => $('sheet').classList.add('hidden');
 $('pickBtn').onclick = () => $('file').click();
@@ -469,24 +628,19 @@ $('file').onchange = async (e) => {
   loadBuffers(items);
 };
 for (const b of document.querySelectorAll('[data-sample]')) {
+  // Hide sample buttons whose files were not deployed with the page.
+  fetch(b.dataset.sample, { method: 'HEAD' }).then((r) => { if (!r.ok) b.hidden = true; }).catch(() => {});
   b.onclick = async () => {
     busy('Downloading sample…');
     try {
       const r = await fetch(b.dataset.sample);
       if (!r.ok) throw new Error(`sample not found (${r.status})`);
       await loadBuffers([{ name: b.dataset.sample, buffer: await r.arrayBuffer() }]);
-      // The demo arm includes a hand, so start with the wrist (not the knuckles) on the tracked wrist.
-      if (b.dataset.slide) { state.slide = +b.dataset.slide; syncControls(); }
     } catch (e) { busy(''); $('err').textContent = `Could not download the sample: ${e.message}`; }
   };
 }
 
-// Hide sample buttons whose files were not deployed with the page.
-for (const b of document.querySelectorAll('[data-sample]')) {
-  fetch(b.dataset.sample, { method: 'HEAD' }).then((r) => { if (!r.ok) b.hidden = true; }).catch(() => {});
-}
-
-// ---------- touch gestures ----------
+// ---------- touch gestures (Slices and 3D only; X-ray vision needs none) ----------
 const pts = new Map();
 let last = null;
 function summary() {
@@ -513,23 +667,11 @@ stage.addEventListener('pointermove', (e) => {
     v.zoom = clamp(v.zoom * pinch, 0.5, 12); v.x = (v.x + dx) * (now.n === 2 ? pinch : 1); v.y = (v.y + dy) * (now.n === 2 ? pinch : 1);
     draw2d();
   } else if (state.mode === '3d') {
-    if (now.n === 1) {
-      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(dy * 0.008, dx * 0.008, 0, 'XYZ'));
-      state.orbit.premultiply(q);
-    } else {
+    if (now.n === 1) state.orbit.premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(dy * 0.008, dx * 0.008, 0, 'XYZ')));
+    else {
       state.zoom3d = clamp(state.zoom3d * pinch, 0.3, 12); state.pan3d.x += dx; state.pan3d.y -= dy;
       state.orbit.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -twist));
     }
-  } else if (state.follow && state.tracked) {
-    if (now.n === 1) {
-      state.roll = Math.round(clamp(state.roll + dx * 0.6, -180, 180));
-      state.slide = Math.round(clamp(state.slide - dy / Math.max(pose.scale.x, 0.01), -200, 200));
-    } else state.size = clamp(state.size * pinch, 0.5, 2);
-    syncControls();
-  } else {
-    const m = state.manual;
-    m.x += dx; m.y -= dy;
-    if (now.n === 2) { m.scale = clamp(m.scale * pinch, 0.05, 50); m.angle -= twist; }
   }
 });
 stage.addEventListener('wheel', (e) => {
@@ -537,12 +679,16 @@ stage.addEventListener('wheel', (e) => {
   const k = Math.exp(-e.deltaY * 0.0015);
   if (state.mode === '2d') { state.view2d.zoom = clamp(state.view2d.zoom * k, 0.5, 12); draw2d(); }
   else if (state.mode === '3d') state.zoom3d = clamp(state.zoom3d * k, 0.3, 12);
-  else if (state.follow && state.tracked) { state.size = clamp(state.size * k, 0.5, 2); syncControls(); }
-  else state.manual.scale = clamp(state.manual.scale * k, 0.05, 50);
 }, { passive: false });
 window.addEventListener('resize', () => { if (state.mode === '2d') draw2d(); else resize3d(); });
 
-// Test hooks: lets automated checks drive the app without a camera.
-window.__xrv = { state, loadBuffers, setMode, applyHand, pose, anatomy, THREE };
+// Test hooks: lets automated checks feed a still picture in place of the camera.
+window.__xrv = {
+  state, loadBuffers, setMode, pose, meshes, findForearm,
+  useTestSource(el) {
+    el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none';
+    stage.insertBefore(el, c2d); state.testSource = el;
+  },
+};
 resize3d();
 tick();
