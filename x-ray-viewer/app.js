@@ -11,7 +11,7 @@ const stage = $('stage'), video = $('video'), c2d = $('c2d'), c3d = $('c3d');
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const nextFrame = () => new Promise((r) => setTimeout(r, 0));
 const now = () => performance.now();
-const HAND_MM = 88;   // typical adult wrist to middle-knuckle distance; sets real-world scale
+const HAND_MM = 88;   // wrist to middle-knuckle distance used when a scan does not say its own
 const DEFAULT_SAMPLE = 'samples/vhf-left-arm-ct.zip';
 
 const state = {
@@ -24,6 +24,7 @@ const state = {
   camOn: false, camError: '', source: null, testSource: null,
   tracker: null, trackerState: 'off', flow: createFlowTracker(), skin: null,
   locked: false, lastHand: 0, lastGood: 0, fade: 0, forearm: null, loading: false,
+  scales: [], widthFit: 1, userSize: 1, sizeShownAt: 0,
 };
 
 // ---------- loading ----------
@@ -77,7 +78,7 @@ async function openSeries(i) {
 
   state.vol = null; state.A = null; state.trackable = false;
   state.orbit.identity(); state.zoom3d = 1; state.pan3d.set(0, 0);
-  state.locked = false; state.fade = 0; state.flow.reset();
+  state.locked = false; state.fade = 0; state.flow.reset(); state.scales = []; state.widthFit = 1; state.userSize = 1;
   if (s.isVolume) {
     let vol = await buildVolume(s, async (p) => { busy(`Building 3D… ${Math.round(p * 100)}%`); await nextFrame(); }, 256, 420);
     if (isCT) vol = smooth(vol);
@@ -116,12 +117,50 @@ function anatomyFrame(vol, isCT) {
   if (Math.abs(thumb.clone().normalize().dot(fingers)) > 0.95) thumb = new THREE.Vector3(1, 0, 0);
   const y = fingers.clone(), x = thumb.clone().addScaledVector(y, -thumb.dot(y)).normalize(), z = new THREE.Vector3().crossVectors(x, y);
   const R = new THREE.Matrix4().makeBasis(x, y, z).transpose();   // volume direction -> anatomy direction
-  return { R, wrist, fingers, forearm, center, limb, labels, regions, size };
+  const handLength = (m && m.handLength) || HAND_MM;
+  const A = { R, wrist, fingers, forearm, center, limb, labels, regions, size, handLength };
+  A.sections = limb ? [50, 75, 100].map((d) => ({ d, pts: crossSection(vol, A, d) })).filter((c) => c.pts.length > 12) : [];
+  return A;
+}
+/**
+ * Outline of the arm's skin in a plane across the forearm, `dist` mm from the wrist toward the elbow.
+ * Returns points in volume mm. Used to compare the scan's forearm width with the one in the camera.
+ */
+function crossSection(vol, A, dist) {
+  const [nx, ny, nz] = vol.dims, [sx, sy, sz] = vol.spacing, d = vol.data;
+  const at = (p) => {
+    const i = Math.round(p.x / sx), j = Math.round(p.y / sy), k = Math.round(p.z / sz);
+    if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) return -1024;
+    return d[(k * ny + j) * nx + i];
+  };
+  const axis = A.forearm.clone().normalize();
+  const c = A.wrist.clone().addScaledVector(axis, -dist);
+  const u = new THREE.Vector3(1, 0, 0); if (Math.abs(u.dot(axis)) > 0.9) u.set(0, 1, 0);
+  u.addScaledVector(axis, -u.dot(axis)).normalize();
+  const v = new THREE.Vector3().crossVectors(axis, u);
+  const pts = [];
+  for (let a = 0; a < 48; a++) {
+    const th = (a / 48) * Math.PI * 2, dir = u.clone().multiplyScalar(Math.cos(th)).addScaledVector(v, Math.sin(th));
+    let last = -1;
+    for (let r = 0; r < 90; r += 0.75) if (at(c.clone().addScaledVector(dir, r)) > -300) last = r;
+    if (last > 5) pts.push(c.clone().addScaledVector(dir, last));
+  }
+  return pts;
 }
 /** Volume mm -> anatomy mm, with the origin at `origin` (wrist for the camera, centre for 3D). */
-function anatomyMatrix(origin, mirror) {
+function anatomyMatrix(origin, mirror, widthFit = 1) {
   const M = new THREE.Matrix4();
   if (mirror) M.makeScale(1, 1, -1);           // a right arm is the left arm reflected through the hand's plane
+  if (widthFit !== 1) {
+    // Stretch across the forearm only (not along it), so a slimmer or broader arm still lines up.
+    const f = state.A.forearm.clone().applyMatrix4(new THREE.Matrix4().extractRotation(state.A.R)).normalize();
+    const k = widthFit - 1, e = M.elements, S = new THREE.Matrix4().set(
+      1 + k * (1 - f.x * f.x), -k * f.x * f.y, -k * f.x * f.z, 0,
+      -k * f.y * f.x, 1 + k * (1 - f.y * f.y), -k * f.y * f.z, 0,
+      -k * f.z * f.x, -k * f.z * f.y, 1 + k * (1 - f.z * f.z), 0,
+      0, 0, 0, 1);
+    void e; M.multiply(S);
+  }
   return M.multiply(state.A.R).multiply(new THREE.Matrix4().makeTranslation(-origin.x, -origin.y, -origin.z));
 }
 
@@ -201,7 +240,10 @@ function poseMatrix(p) {
   return new THREE.Matrix4().compose(p.pos, p.quat, new THREE.Vector3(p.scale, p.scale, p.scale));
 }
 function modelMatrix() {
-  if (state.mode === 'cam') return poseMatrix(pose).multiply(anatomyMatrix(state.A.wrist, state.userSide !== state.side));
+  if (state.mode === 'cam') {
+    const p = { pos: pose.pos, quat: pose.quat, scale: pose.scale * state.userSize };
+    return poseMatrix(p).multiply(anatomyMatrix(state.A.wrist, state.userSide !== state.side, state.widthFit));
+  }
   const W = stage.clientWidth, H = stage.clientHeight, s = state.A.size, big = Math.max(s[0], s[1], s[2]);
   const fit = Math.min((H - 190) / big, W * 0.9 / big) * 1.25 * state.zoom3d;
   const p = { pos: new THREE.Vector3(state.pan3d.x, state.pan3d.y - 10, 0), quat: state.orbit, scale: fit };
@@ -258,7 +300,8 @@ function poseFromHand(hand, W, H, sw, sh) {
     num += Math.hypot(pa[0] - pb[0], pa[1] - pb[1]); den += Math.hypot(wa.x - wb.x, wa.y - wb.y);
   }
   if (den < 0.005) return null;
-  const y = w3(9).sub(w3(0)); const unitsPerMm = y.length() / HAND_MM; y.normalize();
+  // Size the scan so its own hand (wrist to middle knuckle) spans the same distance as the user's.
+  const y = w3(9).sub(w3(0)); const unitsPerMm = y.length() / (state.A ? state.A.handLength : HAND_MM); y.normalize();
   const t = w3(5).sub(w3(17)); const x = t.addScaledVector(y, -t.dot(y)).normalize();
   const z = new THREE.Vector3().crossVectors(x, y);
   const p = P(0);
@@ -304,7 +347,25 @@ function readSkinAndForearm(hand, source, sw, sh) {
   const second = scan(first.dir, 0.75);
   const f = second.dir && second.hits >= 20 ? second.dir : first.dir;
   if (f[0] * back[0] + f[1] * back[1] < 0.55) return { skin };
-  return { skin, forearm: [f[0], -f[1]] };
+  // Width of the forearm across its axis, at a few distances behind the wrist (in hand lengths).
+  const isSkin = (x, y) => {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || y < 0 || x >= w || y >= h) return false;
+    const i = (y * w + x) * 4, rr = img[i], gg = img[i + 1], bb = img[i + 2], yv = 0.299 * rr + 0.587 * gg + 0.114 * bb;
+    return Math.abs(-0.169 * rr - 0.331 * gg + 0.5 * bb - skin.cb) < 15 && Math.abs(0.5 * rr - 0.419 * gg - 0.081 * bb - skin.cr) < 15 && yv > 0.3 * skin.y && yv < 2 * skin.y;
+  };
+  const widths = [];
+  const pxScreen = Math.max(stage.clientWidth / sw, stage.clientHeight / sh) / k;   // screen px per sample px
+  for (const frac of state.A.sections.map((c) => c.d / state.A.handLength)) {
+    const cx = wrist[0] + f[0] * hl * frac, cy = wrist[1] + f[1] * hl * frac;
+    if (!isSkin(cx, cy)) { widths.push(null); continue; }
+    const run = (sgn) => { let gap = 0, r = 0, last = 0; for (r = 0.5; r < 3 * hl; r += 0.5) { if (isSkin(cx - f[1] * r * sgn, cy + f[0] * r * sgn)) { last = r; gap = 0; } else if (++gap > 3) break; } return last; };
+    const a = run(1), b = run(-1);
+    // Reject a measurement that runs into the picture edge (arm cut off by the frame).
+    const ex = (sg, r) => { const x = cx - f[1] * r * sg, y = cy + f[0] * r * sg; return x < 2 || y < 2 || x > w - 3 || y > h - 3; };
+    widths.push(ex(1, a + 1) || ex(-1, b + 1) ? null : (a + b) * pxScreen);
+  }
+  return { skin, forearm: [f[0], -f[1]], widths };
 }
 function applyHand(hand, source) {
   const W = stage.clientWidth, H = stage.clientHeight;
@@ -326,7 +387,30 @@ function applyHand(hand, source) {
       r.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), delta));
     }
   }
-  target.pos.copy(r.pos); target.quat.copy(r.quat); target.scale = r.scale;
+  // Steady the size: median of recent measurements.
+  state.scales.push(r.scale); if (state.scales.length > 9) state.scales.shift();
+  const sorted = state.scales.slice().sort((a, b) => a - b);
+  const steady = sorted[sorted.length >> 1];
+  // Fit the width: compare the forearm's width in the picture with the scan's, across the same line.
+  if (seen.widths && state.forearm && state.A.sections.length) {
+    const rot = new THREE.Matrix4().extractRotation(anatomyMatrix(new THREE.Vector3(), state.userSide !== state.side)).premultiply(new THREE.Matrix4().makeRotationFromQuaternion(r.quat));
+    const perp = new THREE.Vector3(-state.forearm.y, state.forearm.x, 0);
+    const ratios = [];
+    state.A.sections.forEach((sec, i) => {
+      const seenW = seen.widths[i];
+      if (!seenW) return;
+      let lo = Infinity, hi = -Infinity;
+      for (const p of sec.pts) { const q = p.clone().sub(state.A.wrist).applyMatrix4(rot).dot(perp); if (q < lo) lo = q; if (q > hi) hi = q; }
+      const scanW = (hi - lo) * steady * state.userSize;
+      if (scanW > 10) ratios.push(seenW / scanW);
+    });
+    if (ratios.length) {
+      ratios.sort((a, b) => a - b);
+      const want = clamp(ratios[ratios.length >> 1], 0.75, 1.45);
+      state.widthFit += (want - state.widthFit) * 0.15;
+    }
+  }
+  target.pos.copy(r.pos); target.quat.copy(r.quat); target.scale = steady;
   if (!state.locked) { pose.pos.copy(r.pos); pose.quat.copy(r.quat); pose.scale = r.scale; }
   state.locked = true; state.lastHand = state.lastGood = now();
 }
@@ -373,6 +457,7 @@ function hintText() {
   if (state.trackerState === 'loading') return 'Getting ready…';
   if (state.trackerState === 'failed') return 'Tracking could not start on this device.';
   if (!state.xray) return '';
+  if (now() - state.sizeShownAt < 1200) return `Size ${Math.round(state.userSize * 100)}%  ·  double-tap to reset`;
   if (!state.locked) return 'Show your hand and forearm to lock on';
   if (now() - state.lastGood > 1500) return 'Lost your arm. Show your hand again to re-lock';
   return '';
@@ -499,7 +584,14 @@ function summary() {
   const dx = a[1].x - a[0].x, dy = a[1].y - a[0].y;
   return { n: 2, x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2, dist: Math.hypot(dx, dy), ang: Math.atan2(dy, dx) };
 }
-stage.addEventListener('pointerdown', (e) => { stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); last = summary(); });
+let lastTap = 0;
+stage.addEventListener('pointerdown', (e) => {
+  stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); last = summary();
+  if (state.mode === 'cam' && pts.size === 1) {
+    if (now() - lastTap < 320) { state.userSize = 1; state.widthFit = 1; state.scales = []; state.sizeShownAt = now(); }
+    lastTap = now();
+  }
+});
 const up = (e) => { pts.delete(e.pointerId); last = pts.size ? summary() : null; };
 stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
 stage.addEventListener('pointermove', (e) => {
@@ -511,6 +603,10 @@ stage.addEventListener('pointermove', (e) => {
   let twist = cur.n === 2 ? cur.ang - last.ang : 0;
   if (twist > Math.PI) twist -= 2 * Math.PI; else if (twist < -Math.PI) twist += 2 * Math.PI;
   last = cur;
+  if (state.mode === 'cam' && cur.n === 2 && state.xray) {
+    state.userSize = clamp(state.userSize * pinch, 0.6, 1.6); state.sizeShownAt = now();
+    return;
+  }
   if (state.mode === '2d') {
     const v = state.view2d;
     v.zoom = clamp(v.zoom * pinch, 0.5, 12); v.x = (v.x + dx) * (cur.n === 2 ? pinch : 1); v.y = (v.y + dy) * (cur.n === 2 ? pinch : 1);
