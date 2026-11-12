@@ -172,7 +172,7 @@ function setLook(mat, group) {
 
 async function loadModels(onProgress) {
   const [hi, hb, ni, nb] = await Promise.all([
-    fetch('models/head.json').then((r) => r.json()), fetchBin('models/head.bin', onProgress),
+    fetch('models/head.json').then((r) => r.json()), fetchBin('models/head.bin', onProgress, 3004204),
     fetch('models/hands.json').then((r) => r.json()), fetch('models/hands.bin').then((r) => r.arrayBuffer()),
   ]);
   head.info = hi; head.canon = hi.canon.map((p) => new THREE.Vector3(...p));
@@ -210,12 +210,14 @@ async function loadModels(onProgress) {
     hands[side] = { mesh, segs, R: g.joints.map((p) => new THREE.Vector3(...p)), labels: g.labels, alpha: 0, seen: -1e9, P: null };
   }
 }
-async function fetchBin(url, onProgress) {
+async function fetchBin(url, onProgress, expected = 0) {
+  // GitHub Pages sends files gzip-compressed, so Content-Length is the compressed size: collect the
+  // chunks as they come instead of trusting it.
   const res = await fetch(url); if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  const total = +res.headers.get('content-length') || 0;
-  if (!res.body || !total) return res.arrayBuffer();
-  const reader = res.body.getReader(), out = new Uint8Array(total); let got = 0;
-  for (;;) { const { done, value } = await reader.read(); if (done) break; out.set(value, got); got += value.length; onProgress(got / total); }
+  if (!res.body) return res.arrayBuffer();
+  const reader = res.body.getReader(), parts = []; let got = 0;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; parts.push(value); got += value.length; if (expected) onProgress(Math.min(1, got / expected)); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
   return out.buffer;
 }
 
