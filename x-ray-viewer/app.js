@@ -130,9 +130,31 @@ function readSkinAndForearm(hand, img, w, h, pxScreen) {
 }
 
 // ---------- tracking ----------
+/**
+ * Hand-vs-body sanity check. A spread hand can look like a tiny person to the body trackers, which
+ * then squeeze a whole skeleton into the palm. A real body is several hands across, so a "body"
+ * smaller than that, while a hand is being tracked, is thrown away.
+ */
+function handLengthPx() {
+  let L = 0;
+  for (const k of ['left', 'right']) {
+    const J = state.handP[k];
+    if (J && now() - state.lastHand[k] < 700) L = Math.max(L, Math.hypot(J[0].x - J[9].x, J[0].y - J[9].y), Math.hypot(J[5].x - J[17].x, J[5].y - J[17].y) * 1.3);
+  }
+  return L;
+}
+function bodyTooSmall(P, ok, hl) {
+  if (!hl) return false;
+  const d = (a, b) => (ok(a) && ok(b) ? Math.hypot(P[a].x - P[b].x, P[a].y - P[b].y) : 0);
+  // longest bone-sized distance found: shoulder width, torso, upper arm, thigh, shin...
+  const big = Math.max(d(11, 12) / 3.4, d(23, 24) / 2.6, d(11, 23) / 4.5, d(12, 24) / 4.5, d(11, 13) / 2.8, d(12, 14) / 2.8,
+    d(13, 15) / 2.4, d(14, 16) / 2.4, d(23, 25) / 4.0, d(24, 26) / 4.0, d(25, 27) / 3.6, d(26, 28) / 3.6);
+  return big < 0.55 * hl;     // each term is roughly "that distance in hand lengths" scaled to 1
+}
 function onPose(res, src, W, H) {
   const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height);
   const P = screenPoints(res.image, res.world, map.toScreen, POSE_PAIRS);
+  if (bodyTooSmall(P, (i) => (res.vis[i] ?? 1) > 0.35, handLengthPx())) return false;
   state.poseP = state.smooth.pose.filter(P, now() / 1000);
   state.vis = res.vis; state.poseFrom = 'mp'; state.lastMP = now();
   const tracked = { left: now() - state.lastHand.left < 300, right: now() - state.lastHand.right < 300 };
@@ -160,7 +182,7 @@ function onHand(hand, src, W, H, img, iw, ih) {
   if (seen.skin) state.skin = seen.skin;
   if (seen.forearm) state.forearm = state.forearm ? state.forearm.lerp(seen.forearm, 0.3).normalize() : seen.forearm;
   if (seen.width) state.forearmWidth = state.forearmWidth ? state.forearmWidth + (seen.width - state.forearmWidth) * 0.2 : seen.width;
-  const poseFresh = now() - state.lastPose < 600;
+  const poseFresh = now() - state.lastPose < 600 && !bodyTooSmall(state.poseFrom === 'move' ? state.limbP || [] : state.poseP || [], (i) => !!(state.poseFrom === 'move' ? state.limbP : state.poseP)?.[i] && (state.poseFrom === 'move' ? state.limbVis[i] > 0.3 : (state.vis?.[i] ?? 1) > 0.35), handLengthPx());
   if (!poseFresh && !state.handOnly) { hideAll(view.seg); }
   state.handOnly = !poseFresh;
   const r = solveHand(state.model, side, state.handP[side], view.seg, { withForearm: !poseFresh, forearmDir: seen.forearm || null, prevDelta: state.delta[side] });
@@ -186,6 +208,7 @@ function onMove(res, src, W, H) {
   state.moveHits = chain && joints >= 2 ? (state.moveHits || 0) + 1 : 0;
   const holding = state.poseFrom === 'move' && now() - state.lastPose < 1000;
   if (!state.moveHits || (state.moveHits < 2 && !holding)) return false;
+  if (bodyTooSmall(P, ok, handLengthPx())) return false;
   const Ps = state.smooth.move.filter(P, now() / 1000);
   const tracked = { left: now() - state.lastHand.left < 300, right: now() - state.lastHand.right < 300 };
   const torso = (ok(11) || ok(12)) && (ok(23) || ok(24)) && [11, 12, 23, 24].filter(ok).length >= 3;
