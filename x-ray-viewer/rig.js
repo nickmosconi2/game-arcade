@@ -59,15 +59,28 @@ function frame(dir, ref) {
   z.normalize();
   return new THREE.Matrix4().makeBasis(x, new THREE.Vector3().crossVectors(z, x), z);
 }
-/** Lay a model bone (restA -> restB) from screen point A toward screen point B. */
-function laySegment(restA, restB, A, B, baseRot, ref, scale, minK = 0.6, maxK = 1.6) {
-  const restDir = restB.clone().sub(restA).transformDirection(baseRot);
-  const userDir = B.clone().sub(A), userLen = userDir.length(), restLen = restB.distanceTo(restA) * scale;
-  if (userLen < 1e-3) return null;
-  const k = scale * Math.max(minK, Math.min(maxK, userLen / Math.max(restLen, 1e-3)));
+/**
+ * Lay a model bone (restA -> restB) from screen point A to screen point B. Its length is stretched
+ * to reach B exactly; its thickness follows `scale` (px per mm of the hand or body), so a bone seen
+ * end-on gets shorter but not thinner.
+ */
+function laySegment(restA, restB, A, B, baseRot, ref, scale, minK = 0.5, maxK = 2.5) {
+  const restVec = restB.clone().sub(restA), restLen = restVec.length();
+  const restDir = restVec.clone().transformDirection(baseRot);
+  const userDir = B.clone().sub(A), userLen = userDir.length();
+  if (userLen < 1e-3 || restLen < 1e-3) return null;
+  const kLen = Math.max(minK * scale * 0.3, Math.min(maxK * scale, userLen / restLen));
+  const kThick = scale * Math.max(0.8, Math.min(1.25, kLen / scale));
+  const d = restVec.clone().divideScalar(restLen);
+  // scale kThick everywhere plus extra along the bone's own axis (rest space)
+  const e = kLen - kThick, S = new THREE.Matrix4().set(
+    kThick + e * d.x * d.x, e * d.x * d.y, e * d.x * d.z, 0,
+    e * d.y * d.x, kThick + e * d.y * d.y, e * d.y * d.z, 0,
+    e * d.z * d.x, e * d.z * d.y, kThick + e * d.z * d.z, 0,
+    0, 0, 0, 1);
   const Q = frame(userDir, ref).multiply(frame(restDir, ref).transpose());
   return new THREE.Matrix4().makeTranslation(A.x, A.y, A.z).multiply(Q).multiply(baseRot)
-    .multiply(new THREE.Matrix4().makeScale(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-restA.x, -restA.y, -restA.z));
+    .multiply(S).multiply(new THREE.Matrix4().makeTranslation(-restA.x, -restA.y, -restA.z));
 }
 
 /** Screen points from a MediaPipe result: x, y from the picture; depth from the metric world points. */
@@ -85,74 +98,73 @@ export function screenPoints(image, world, toScreen, pairs) {
 export const HAND_PAIRS = [[0, 5], [0, 17], [5, 17], [0, 9], [5, 9], [9, 13], [13, 17]];
 export const POSE_PAIRS = [[11, 12], [23, 24], [11, 23], [12, 24], [11, 13], [12, 14]];
 
+// Segments owned by each solver (the forearm/upper arm can come from either).
+export const HAND_SEGS = (i) => [SEG.hand[i], ...Array.from({ length: 15 }, (_, f) => SEG.fingers[i] + f)];
+export const BODY_SEGS = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13];
+
 /**
- * Hand: palm fitted to the wrist and knuckles; finger bones laid joint to joint.
- * If `withForearm`, also places the forearm (and upper arm) from the palm, swung toward forearmDir.
+ * Hand: palm fitted to the wrist and knuckles; finger bones laid joint to joint. Writes target
+ * matrices into tgt and marks them in want. The forearm is placed only when asked (hand-only view)
+ * and only along a forearm actually seen in the picture.
  */
-export function solveHand(model, side, P, seg, { withForearm = false, forearmDir = null, prevDelta = 0 } = {}) {
+export function solveHand(model, side, P, tgt, want, { withForearm = false, forearmDir = null } = {}) {
   const i = side2i(side), R = model.hands[side];
   const { M: palm, scale } = fitRigid(PALM.map((j) => R[j]), PALM.map((j) => P[j]));
-  seg[SEG.hand[i]].copy(palm);
+  tgt[SEG.hand[i]].copy(palm); want[SEG.hand[i]] = true;
   const rotOnly = new THREE.Matrix4().extractRotation(palm);
   const n = new THREE.Vector3().crossVectors(R[5].clone().sub(R[0]), R[17].clone().sub(R[0])).normalize().transformDirection(rotOnly);
   const across = R[17].clone().sub(R[5]).transformDirection(rotOnly);
   for (const [f, a, b] of FINGER_SEGS) {
     const u = P[b].clone().sub(P[a]).normalize();
     const M = laySegment(R[a], R[b], P[a], P[b], rotOnly, Math.abs(u.dot(n)) < 0.8 ? n : across, scale);
-    seg[SEG.fingers[i] + f].copy(M || palm);
+    tgt[SEG.fingers[i] + f].copy(M || palm); want[SEG.fingers[i] + f] = true;
   }
-  let delta = prevDelta;
-  if (withForearm) {
+  if (withForearm && forearmDir) {
     const elbowRest = model.pose[i === 0 ? 13 : 14];
     const w0 = R[0].clone().applyMatrix4(palm), e = elbowRest.clone().applyMatrix4(palm).sub(w0);
-    if (forearmDir && Math.hypot(e.x, e.y) > 1e-3) {
-      delta = Math.atan2(e.x * forearmDir.y - e.y * forearmDir.x, e.x * forearmDir.x + e.y * forearmDir.y);
+    if (Math.hypot(e.x, e.y) > 1e-3) {
+      let delta = Math.atan2(e.x * forearmDir.y - e.y * forearmDir.x, e.x * forearmDir.x + e.y * forearmDir.y);
       delta = Math.max(-1, Math.min(1, delta));
-    } else delta *= 0.9;
-    const F = new THREE.Matrix4().makeTranslation(w0.x, w0.y, w0.z).multiply(new THREE.Matrix4().makeRotationZ(delta))
-      .multiply(new THREE.Matrix4().makeTranslation(-w0.x, -w0.y, -w0.z)).multiply(palm);
-    seg[SEG.forearm[i]].copy(F); seg[SEG.upperArm[i]].copy(F);
+      const F = new THREE.Matrix4().makeTranslation(w0.x, w0.y, w0.z).multiply(new THREE.Matrix4().makeRotationZ(delta))
+        .multiply(new THREE.Matrix4().makeTranslation(-w0.x, -w0.y, -w0.z)).multiply(palm);
+      tgt[SEG.forearm[i]].copy(F); want[SEG.forearm[i]] = true;
+    }
   }
-  return { scale, delta };
+  return { scale };
 }
 
 /**
- * Body: torso fitted to shoulders and hips, head to the face points, each limb bone laid from one
- * tracked joint to the next. Segments whose joints are not visible are hidden.
- * handsTracked: {left: bool, right: bool}: hands driven by the hand tracker are left alone.
+ * Body from the 33 body points. Strict: a bone is placed only when both of its joints are clearly
+ * seen inside the picture (no guessed limbs). The torso needs both shoulders plus either the hips
+ * or the face; the skull needs three face points.
  */
-export function solveBody(model, P, vis, seg, handsTracked = {}) {
-  const J = model.pose, ok = (i) => P[i] && (vis[i] ?? 1) > 0.35;
-  for (let s = 0; s < SEG_COUNT; s++) {
-    const isHand = (s === SEG.hand[0] || (s >= SEG.fingers[0] && s < SEG.fingers[0] + 15)) ? 'left'
-      : (s === SEG.hand[1] || (s >= SEG.fingers[1] && s < SEG.fingers[1] + 15)) ? 'right' : null;
-    if (!isHand || !handsTracked[isHand]) seg[s].copy(HIDDEN);
-  }
-  const T = [11, 12, 23, 24];
-  if (!ok(11) && !ok(12)) return null;
-  const { M: torso, scale } = fitRigid(T.map((j) => J[j]), T.map((j) => P[j]));
-  seg[SEG.torso].copy(torso);
+export function solveBody(model, P, vis, tgt, want, { minVis = 0.65, loose = vis } = {}) {
+  // ok: seen inside the picture (limbs). okT: may be a little outside it (torso and head fits).
+  const J = model.pose, ok = (i) => P[i] && (vis[i] ?? 0) > minVis, okT = (i) => P[i] && (loose[i] ?? 0) > minVis;
+  for (const s of BODY_SEGS) want[s] = false;
+  if (!okT(11) || !okT(12) || (!ok(11) && !ok(12))) return null;
+  const T = [11, 12, ...[23, 24].filter(okT)];
+  const face = [0, 7, 8].filter(okT);
+  if (T.length < 4 && face.length < 2) return null;
+  const pts = T.length >= 4 ? T : [...T, ...face];
+  const { M: torso, scale } = fitRigid(pts.map((j) => J[j]), pts.map((j) => P[j]));
+  tgt[SEG.torso].copy(torso); want[SEG.torso] = true;
   const rotOnly = new THREE.Matrix4().extractRotation(torso);
   const fwd = new THREE.Vector3(0, 0, model.info.front || 1).transformDirection(rotOnly);
   const upv = new THREE.Vector3(0, 1, 0).transformDirection(rotOnly);
-  const Hd = [0, 2, 5, 7, 8].filter(ok);
-  if (Hd.length >= 3) seg[SEG.head].copy(fitRigid(Hd.map((j) => J[j]), Hd.map((j) => P[j])).M);
-  else if (ok(0)) seg[SEG.head].copy(torso);
-  const lay = (s, a, b, ref) => { if (ok(a) && ok(b)) { const M = laySegment(J[a], J[b], P[a], P[b], rotOnly, ref, scale, 0.65, 1.5); if (M) seg[s].copy(M); } };
+  const Hd = [0, 2, 5, 7, 8].filter(okT);
+  if (Hd.length >= 3) { tgt[SEG.head].copy(fitRigid(Hd.map((j) => J[j]), Hd.map((j) => P[j])).M); want[SEG.head] = true; }
+  const lay = (s, a, b, ref) => {
+    if (!ok(a) || !ok(b)) return;
+    const M = laySegment(J[a], J[b], P[a], P[b], rotOnly, ref, scale);
+    if (M) { tgt[s].copy(M); want[s] = true; }
+  };
   for (const i of [0, 1]) {
     lay(SEG.upperArm[i], 11 + i, 13 + i, fwd);
     lay(SEG.forearm[i], 13 + i, 15 + i, fwd);
     lay(SEG.thigh[i], 23 + i, 25 + i, fwd);
     lay(SEG.shin[i], 25 + i, 27 + i, fwd);
     lay(SEG.foot[i], 27 + i, 31 + i, upv);
-    const side = i === 0 ? 'left' : 'right';
-    if (!handsTracked[side] && ok(15 + i) && ok(17 + i) && ok(19 + i)) {
-      // coarse hand from the wrist, index and little-finger knuckles
-      const R = model.hands[side];
-      const restMid = R[5].clone().add(R[17]).multiplyScalar(0.5), userMid = P[17 + i].clone().add(P[19 + i]).multiplyScalar(0.5);
-      const M = laySegment(R[0], restMid, P[15 + i], userMid, rotOnly, fwd, scale, 0.6, 1.6);
-      if (M) { seg[SEG.hand[i]].copy(M); for (let f = 0; f < 15; f++) seg[SEG.fingers[i] + f].copy(M); }
-    }
   }
   return { scale };
 }
@@ -160,43 +172,3 @@ export function solveBody(model, P, vis, seg, handsTracked = {}) {
 /** Hide everything (used before a hand-only solve). */
 export function hideAll(seg) { for (const m of seg) m.copy(HIDDEN); }
 
-/**
- * Limbs only (no shoulders in view, e.g. a leg seen from above): each limb bone is laid from one
- * joint to the next in the picture plane, sized from its own length. P: 33 points, z ignored.
- */
-export function solveLimbs(model, P, vis, seg, handsTracked = {}) {
-  const J = model.pose, ok = (i) => P[i] && (vis[i] ?? 0) > 0.3;
-  for (let s = 0; s < SEG_COUNT; s++) {
-    const isHand = (s === SEG.hand[0] || (s >= SEG.fingers[0] && s < SEG.fingers[0] + 15)) ? 'left'
-      : (s === SEG.hand[1] || (s >= SEG.fingers[1] && s < SEG.fingers[1] + 15)) ? 'right' : null;
-    if (!isHand || !handsTracked[isHand]) seg[s].copy(HIDDEN);
-  }
-  const I = new THREE.Matrix4(), toward = new THREE.Vector3(0, 0, 1);
-  const flat = (i) => new THREE.Vector3(P[i].x, P[i].y, 0);
-  let n = 0, sum = 0;
-  const lay = (s, a, b) => {
-    if (!ok(a) || !ok(b)) return null;
-    const A = flat(a), B = flat(b), k = A.distanceTo(B) / Math.max(J[a].distanceTo(J[b]), 1);
-    if (k < 0.05) return null;
-    const M = laySegment(J[a], J[b], A, B, I, toward, k, 1, 1);
-    if (M) { seg[s].copy(M); n++; sum += k; }
-    return M ? k : null;
-  };
-  for (const i of [0, 1]) {
-    lay(SEG.upperArm[i], 11 + i, 13 + i);
-    const kf = lay(SEG.forearm[i], 13 + i, 15 + i);
-    lay(SEG.thigh[i], 23 + i, 25 + i);
-    const ks = lay(SEG.shin[i], 25 + i, 27 + i);
-    // No toe point: the foot stays at its rest angle to the shin (pointing toward the camera).
-    if (ks && ok(27 + i)) seg[SEG.foot[i]].copy(seg[SEG.shin[i]]);
-    const side = i === 0 ? 'left' : 'right';
-    if (kf && !handsTracked[side] && ok(15 + i)) {
-      // hand continues the forearm
-      const A = flat(15 + i), d = A.clone().sub(flat(13 + i)).normalize(), R = model.hands[side];
-      const mid = R[5].clone().add(R[17]).multiplyScalar(0.5), len = R[0].distanceTo(mid) * kf;
-      const M = laySegment(R[0], mid, A, A.clone().addScaledVector(d, len), I, toward, kf, 1, 1);
-      if (M) { seg[SEG.hand[i]].copy(M); for (let f = 0; f < 15; f++) seg[SEG.fingers[i] + f].copy(M); }
-    }
-  }
-  return n ? { scale: sum / n } : null;
-}
