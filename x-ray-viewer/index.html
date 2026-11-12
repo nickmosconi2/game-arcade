@@ -26,16 +26,12 @@
 
   /* The X-ray window */
   #box { position:fixed; z-index:3; pointer-events:none; display:none; }
-  #box .c { position:absolute; width:26px; height:26px; border:3px solid var(--accent); filter:drop-shadow(0 0 4px #6fd0ff99); }
+  #box .c { position:absolute; width:26px; height:26px; border:3px solid #ffffffe0; filter:drop-shadow(0 1px 3px #0008); }
   #box .tl { left:-2px; top:-2px; border-right:0; border-bottom:0; border-top-left-radius:10px; }
   #box .tr { right:-2px; top:-2px; border-left:0; border-bottom:0; border-top-right-radius:10px; }
   #box .bl { left:-2px; bottom:-2px; border-right:0; border-top:0; border-bottom-left-radius:10px; }
   #box .br { right:-2px; bottom:-2px; border-left:0; border-top:0; border-bottom-right-radius:10px; }
-  #box .edge { position:absolute; inset:0; border:1px solid #6fd0ff55; border-radius:10px; box-shadow:0 0 0 200vmax rgba(0,6,12,.42), inset 0 0 18px #6fd0ff22; }
-  #hud { position:absolute; left:10px; right:10px; top:8px; display:flex; justify-content:space-between; font:600 10px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing:.12em; color:#9fe2ff; text-shadow:0 0 6px #6fd0ffaa; }
-  #hud b { display:inline-block; width:6px; height:6px; border-radius:50%; background:#6fd0ff; margin-right:6px; vertical-align:1px; box-shadow:0 0 6px #6fd0ff; animation:blink 1s steps(2) infinite; }
-  #hud.locked b { background:#7dffb0; box-shadow:0 0 6px #7dffb0; animation:none; }
-  @keyframes blink { 50% { opacity:.2; } }
+  #box .edge { position:absolute; inset:0; border:1px solid #ffffff2a; border-radius:10px; box-shadow:0 0 0 200vmax rgba(0,0,0,.22); }
   #region { position:absolute; left:0; right:0; top:100%; margin-top:10px; text-align:center; }
   #region span { display:inline-block; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:14px; font-weight:600; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
   #region span:empty { display:none; }
@@ -85,7 +81,7 @@
   <canvas id="c3d"></canvas>
 </div>
 
-<div id="box"><div class="edge"></div><div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div><div id="hud"><span><b></b><span id="hudL">SCANNING</span></span><span id="hudR"></span></div><div id="region"><span id="regionText"></span></div></div>
+<div id="box"><div class="edge"></div><div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div><div id="region"><span id="regionText"></span></div></div>
 <div id="labels"></div>
 
 <div id="top">
@@ -102,7 +98,6 @@
 <div id="lock"><b>●</b> Locked on</div>
 
 <div id="dock">
-  <button id="styleBtn">X-ray</button>
   <button id="xrayBtn">X-RAY</button>
   <button id="layerBtn">Bone only</button>
 </div>

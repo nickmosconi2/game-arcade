@@ -396,6 +396,28 @@ function updateLabels(box, show, inMask) {
   }
 }
 
+/** Brightness of the room from the camera picture, so the inside is lit like the outside. */
+function sceneExposure() {
+  if (!small.width) return 1;
+  const d = smallCtx.getImageData(0, 0, small.width, small.height).data;
+  let sum = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4 * 17) { sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n++; }
+  const y = n ? sum / n / 255 : 0.45;
+  return clamp(0.62 + y * 0.9, 0.7, 1.25);
+}
+/** Direction of the limb in the middle of the window (muscle fibres run along it). */
+function fiberDir(box) {
+  const J = state.model.pose, cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+  let best = null, bd = Infinity;
+  for (const [s, a, b] of [[SEG.forearm[0], 13, 15], [SEG.forearm[1], 14, 16], [SEG.upperArm[0], 11, 13], [SEG.upperArm[1], 12, 14], [SEG.thigh[0], 23, 25], [SEG.thigh[1], 24, 26], [SEG.shin[0], 25, 27], [SEG.shin[1], 26, 28], [SEG.hand[0], 15, 19], [SEG.hand[1], 16, 20]]) {
+    const M = view.seg[s]; if (M.elements[0] === 0 && M.elements[5] === 0) continue;
+    const A = J[a].clone().applyMatrix4(M), B = J[b].clone().applyMatrix4(M), mid = A.clone().add(B).multiplyScalar(0.5);
+    const d = Math.hypot(mid.x - cx, mid.y - cy), v = new THREE.Vector2(B.x - A.x, B.y - A.y);
+    if (v.lengthSq() > 4 && d < bd) { bd = d; best = v.normalize(); }
+  }
+  return best || new THREE.Vector2(0, 1);
+}
+
 // ---------- main loop ----------
 function hintText() {
   if (state.mode !== 'cam') return '';
@@ -405,7 +427,7 @@ function hintText() {
   if (!state.xray) return '';
   if (state.trackerState === 'loading') return 'Getting ready…';
   if (state.trackerState === 'failed') return 'Tracking could not start on this device.';
-  if (!state.locked) return state.moveState === 'loading' ? 'Scanning… (loading limb finder)' : 'Scanning… get a hand, a face, or a knee or elbow in view';
+  if (!state.locked) return state.moveState === 'loading' ? 'Looking… (loading the limb finder)' : 'Show me a hand, a face, or a knee or elbow';
   if (now() - state.lastGood > 1500) return 'Lost it. Step back a little';
   return '';
 }
@@ -448,8 +470,6 @@ async function tick() {
         }
       }
       const live = state.locked && now() - state.lastGood < 2500;
-      if (live && !state.wasLive) state.sweepT0 = t;          // new lock: sweep the scan over it
-      state.wasLive = live;
       state.fade += ((live && state.xray ? 1 : 0) - state.fade) * 0.12;
       state.on += ((state.xray ? 1 : 0) - state.on) * 0.2;
       renderer.clear();
@@ -462,25 +482,16 @@ async function tick() {
           const mc = view.maskCanvas, sc = mc.width / W, md = mc.getContext('2d').getImageData(0, 0, mc.width, mc.height).data;
           inMask = (q) => { const x = Math.round((W / 2 + q.x) * sc), y = Math.round((H / 2 - q.y) * sc); return x >= 0 && y >= 0 && x < mc.width && y < mc.height && md[(y * mc.width + x) * 4] > 140; };
         }
-        // Scan beam: one slow pass that reveals the bones when a body is found, then a faint pass
-        // every few seconds; a quick repeating pass while still searching.
-        const span = box.y1 - box.y0 + 30, el = t - state.sweepT0;
-        let sweep, amp, reveal = -1e5;
-        if (!live) { const ph = (t % 1.7) / 1.7; sweep = box.y1 + 10 - ph * span; amp = 0.7; }
-        else if (el < 1.1) { sweep = box.y1 + 10 - (el / 1.1) * span; amp = 1; reveal = sweep; }
-        else { const ph = ((el - 1.1) % 4) / 1.6; sweep = ph < 1 ? box.y1 + 10 - ph * span : -1e5; amp = 0.35; }
         const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height);
-        view.render(W, H, box, { mask: true, xray: state.film, fade: state.fade, time: t, on: state.on, cam: map, sweep, sweepAmp: amp, reveal });
+        if (state.frame % 15 === 0 || !state.exposure) state.exposure = sceneExposure();
+        if (state.fade > 0.01) view.render(W, H, box, { mask: true, fade: state.fade, cam: map, exposure: state.exposure, fiber: fiberDir(box) });
         if (state.fade > 0.01) updateLabels(box, true, inMask); else { updateLabels(box, false); $('regionText').textContent = ''; state.caption.text = ''; }
       } else { updateLabels(box, false); $('regionText').textContent = ''; }
-      $('lock').style.display = 'none';
-      $('hud').classList.toggle('locked', live);
-      const hl = live ? 'LOCKED' : 'SCANNING';
-      if ($('hudL').textContent !== hl) $('hudL').textContent = hl;
+      $('lock').style.display = state.xray && live && now() - state.lastGood < 1500 ? 'block' : 'none';
     } else if (state.mode === '3d' && state.model) {
       renderer.clear();
       pose3d(W, H);
-      view.render(W, H, { x0: -W / 2, x1: W / 2, y0: -H / 2, y1: H / 2 }, { mask: false, xray: state.film, fade: 1, time: t, cavity: false, on: 1 });
+      view.render(W, H, { x0: -W / 2, x1: W / 2, y0: -H / 2, y1: H / 2 }, { mask: false, fade: 1, cavity: false, exposure: 1.05 });
       updateLabels({ x0: -W / 2 + 10, x1: W / 2 - 10, y0: -H / 2 + 110, y1: H / 2 - 70 }, true);
       $('lock').style.display = 'none';
     } else { renderer.clear(); updateLabels(windowBox(), false); }
@@ -516,9 +527,7 @@ function setMode(mode) {
 function syncButtons() {
   $('xrayBtn').classList.toggle('on', state.xray);
   $('xrayBtn').textContent = state.xray ? 'X-RAY ON' : 'X-RAY';
-  $('styleBtn').textContent = state.film ? 'X-ray' : 'Anatomy';
   $('layerBtn').textContent = LAYERS[state.layer].label;
-  $('hudR').textContent = LAYERS[state.layer].hud;
   $('flipBtn').style.display = state.mode === 'cam' ? '' : 'none';
   $('labelBtn').classList.toggle('on', state.labels);
   $('box').style.display = state.mode === 'cam' && state.xray ? 'block' : 'none';
@@ -531,7 +540,6 @@ $('flipBtn').onclick = async () => {
   state.facing = state.facing === 'user' ? 'environment' : 'user';
   resetTracking(); stopCamera(); await startCamera();
 };
-$('styleBtn').onclick = () => { state.film = !state.film; syncButtons(); };
 $('layerBtn').onclick = () => { state.layer = (state.layer + 1) % LAYERS.length; applyLayers(); syncButtons(); };
 $('labelBtn').onclick = () => { state.labels = !state.labels; syncButtons(); };
 for (const [kind, label] of [['bone', 'Bones'], ['muscle', 'Muscles'], ['organ', 'Organs'], ['artery', 'Arteries'], ['vein', 'Veins'], ['nerve', 'Nerves']]) {

@@ -5,7 +5,7 @@ import * as THREE from './vendor/three.module.min.js';
 
 export const SEG_COUNT = 44;
 export const KIND_STYLE = {
-  bone:         { color: [0.93, 0.88, 0.76], alpha: 1.0, order: 2, peel: 0 },
+  bone:         { color: [0.90, 0.85, 0.74], alpha: 1.0, order: 2, peel: 0 },
   artery:       { color: [0.86, 0.10, 0.12], alpha: 1.0, order: 3, peel: 0 },
   vein:         { color: [0.20, 0.32, 0.86], alpha: 1.0, order: 3, peel: 0 },
   nerve:        { color: [0.96, 0.85, 0.35], alpha: 1.0, order: 3, peel: 0 },
@@ -21,9 +21,6 @@ export const KIND_STYLE = {
   muscle:       { color: [0.74, 0.20, 0.17], alpha: 0.88, order: 5, peel: 0.18 },
   tissue:       { color: [0.90, 0.85, 0.80], alpha: 0.5, order: 4, peel: 0.3 },
 };
-/** How bright each tissue shows in the X-ray scan look (bone densest; vessels as if dye-filled). */
-const SCAN_DENSITY = { bone: 1.0, artery: 0.55, vein: 0.38, nerve: 0.3, muscle: 0.07, tissue: 0.05 };
-const scanDensity = (k) => SCAN_DENSITY[k] ?? (k === 'organ_lung' ? 0.06 : k === 'organ_heart' ? 0.22 : 0.16);
 /** Display group for each tissue kind (layers, labels). */
 export const GROUP = (k) => (k.startsWith('organ') ? 'organ' : k);
 
@@ -76,6 +73,9 @@ export async function loadBody(base = 'models', onProgress) {
   };
 }
 
+// How each kind of tissue is shaded: 0 bone, 1 muscle, 2 vessel/nerve, 3 organ
+const SHADE = (k) => (k === 'bone' ? 0 : k === 'muscle' ? 1 : k === 'artery' || k === 'vein' || k === 'nerve' ? 2 : 3);
+
 const VERT = `
 uniform mat4 uSeg[${SEG_COUNT}];
 in vec4 skin;
@@ -83,20 +83,34 @@ out vec3 vN;
 out vec3 vP;
 out vec3 vR;
 void main() {
-  vR = position;
   int a = int(skin.x + 0.5), b = int(skin.y + 0.5);
   float w = skin.z / 255.0;
   mat4 M = uSeg[a] * (1.0 - w) + uSeg[b] * w;
   vec4 p = M * vec4(position, 1.0);
   vN = normalize(mat3(M) * normal);
   vP = p.xyz;
+  vR = position;
   gl_Position = projectionMatrix * viewMatrix * p;
 }`;
 
+const NOISE = `
+float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float n3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 finish(vec3 c) { c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14); return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)); }
+`;
+
+// Tissue surfaces: lit like the room (exposure follows the camera), wet highlights, soft light
+// bleeding through organs and muscle, a warm bounce from the surrounding flesh, fine surface detail.
 const FRAG = `
 precision highp float;
 uniform vec3 uColor;
-uniform float uAlpha, uPeel, uXray, uUseMask, uFade, uDensity, uReveal, uSweep, uSweepAmp, uTime;
+uniform float uAlpha, uPeel, uUseMask, uFade, uShade, uExposure;
 uniform sampler2D uMask;
 uniform vec2 uRes;
 uniform vec4 uBox;
@@ -104,101 +118,124 @@ in vec3 vN;
 in vec3 vP;
 in vec3 vR;
 out vec4 outColor;
-float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-float n3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
-             mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+${NOISE}
 void main() {
   float m = uUseMask > 0.5 ? texture(uMask, gl_FragCoord.xy / uRes).r : 1.0;
   if (m < 0.02) discard;
   vec3 n = normalize(vN);
   if (!gl_FrontFacing) n = -n;
-  if (uXray > 0.5) {
-    // Radiograph: every surface adds light (additive blending), so where X-rays would cross more bone
-    // it is brighter: bright cortical edges, darker marrow, overlaps glow. Grainy bone texture.
-    if (uUseMask > 0.5 && vP.y < uReveal) discard;
-    float edge = pow(1.0 - abs(n.z), 1.7);
-    float grain = 0.78 + 0.44 * n3(vR * 0.16) + 0.12 * n3(vR * 0.6);
-    float v = uDensity * (0.045 + 0.40 * edge) * grain;
-    v += uDensity * uSweepAmp * 0.55 * exp(-pow((vP.y - uSweep) / 7.0, 2.0));
-    vec3 c = vec3(0.80, 0.92, 1.0) * v;
-    outColor = vec4(c * smoothstep(0.02, 0.3, m) * uFade, 1.0);
-    return;
-  }
-  vec3 L = normalize(vec3(-0.35, 0.55, 0.76));
-  float dif = max(dot(n, L), 0.0), rim = pow(1.0 - abs(n.z), 2.0);
-  float spec = pow(max(dot(n, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 36.0);
-  vec3 c = uColor * (0.32 + 0.78 * dif) + spec * 0.28;
+  bool bone = uShade < 0.5, muscle = abs(uShade - 1.0) < 0.5, vessel = abs(uShade - 2.0) < 0.5;
+  // fine surface relief: pores on bone, fibres on muscle, a soft mottle elsewhere
+  vec3 q = vR * (bone ? 0.9 : 0.35);
+  if (muscle) q = vR * vec3(0.9, 0.12, 0.9);
+  float e = 0.35, h0 = n3(q);
+  vec3 g = vec3(n3(q + vec3(e, 0, 0)) - h0, n3(q + vec3(0, e, 0)) - h0, n3(q + vec3(0, 0, e)) - h0);
+  n = normalize(n - (g - n * dot(g, n)) * (bone ? 0.9 : 0.6));
+  vec3 alb = toLinear(uColor);
+  float mott = n3(vR * 0.04) * 0.6 + n3(vR * 0.15) * 0.4;
+  if (bone) alb *= mix(vec3(0.86, 0.80, 0.72), vec3(1.06, 1.03, 0.98), mott);
+  else alb *= 0.85 + 0.3 * mott;
+  vec3 L = normalize(vec3(-0.45, 0.62, 0.65)), V = vec3(0.0, 0.0, 1.0), Hh = normalize(L + V);
+  float wrap = bone ? 0.25 : 0.55;
+  float dif = max((dot(n, L) + wrap) / (1.0 + wrap), 0.0);
+  vec3 sky = vec3(0.62, 0.60, 0.60), ground = vec3(0.42, 0.10, 0.08);
+  vec3 amb = mix(ground, sky, n.y * 0.5 + 0.5) * 0.55;
+  float fres = pow(1.0 - max(n.z, 0.0), 4.0);
+  float spec = pow(max(dot(n, Hh), 0.0), bone ? 48.0 : 90.0) * (bone ? 0.35 : 0.7) + fres * (bone ? 0.05 : 0.12);
+  vec3 c = alb * (amb + dif * vec3(1.05, 1.0, 0.95)) + spec * vec3(1.0, 0.97, 0.94);
+  if (!bone) c += alb * (1.0 - dif) * 0.25 * vec3(1.0, 0.45, 0.4);       // light bleeding through tissue
+  c += pow(1.0 - abs(n.z), 3.0) * vec3(0.35, 0.06, 0.05) * (bone ? 0.35 : 0.15); // flesh-tinted edges
+  if (vessel) c *= 0.9;
+  c *= uExposure;
   float a = uAlpha;
   if (uPeel > 0.0 && uUseMask > 0.5) {
     // Muscle thins toward the middle of the opening, so you see down to vessels and bone.
     vec2 bc = (uBox.xy + uBox.zw) * 0.5, hs = (uBox.zw - uBox.xy) * 0.5;
     float r = length((vP.xy - bc) / hs);
     a *= mix(uPeel, 1.0, smoothstep(0.25, 0.95, r));
-    a = max(a, rim * 0.55 * uAlpha);
   }
-  // Depth cue: the cut edge of the opening casts a soft shadow inward.
-  c *= mix(0.3, 1.0, smoothstep(0.12, 0.8, m));
-  outColor = vec4(c, a * smoothstep(0.02, 0.25, m) * uFade);
+  // The cut edge of the opening casts a soft shadow inward.
+  c *= mix(0.25, 1.0, smoothstep(0.12, 0.85, m));
+  outColor = vec4(finish(c), a * smoothstep(0.02, 0.25, m) * uFade);
 }`;
 
-// The opening itself: dark tissue inside, a cut rim of skin and fat at the edge.
+// Bone silhouettes, drawn small and blurred into soft shadows on the flesh behind them.
+const SIL_FRAG = `
+precision highp float;
+out vec4 outColor;
+void main() { outColor = vec4(1.0); }`;
+
+// The opening: a real cut. From the outside in: the person's own skin (from the camera picture),
+// dermis, yellow fat, a thin white fascia, then wet muscle. The walls are lit from the room's
+// light direction, and the bones cast soft shadows onto the muscle.
 const CAV_VERT = `
 uniform vec4 uBox;
 out vec2 vS;
 void main() { vec2 p = mix(uBox.xy, uBox.zw, position.xy * 0.5 + 0.5); vS = p; gl_Position = projectionMatrix * vec4(p, 0.0, 1.0); }`;
 const CAV_FRAG = `
 precision highp float;
-uniform sampler2D uMask, uCam;
-uniform vec2 uRes, uStage;
-uniform float uFade, uXray, uTime, uOn, uHasCam, uSweep, uSweepAmp;
+uniform sampler2D uMask, uCam, uShadow;
+uniform vec2 uRes, uStage, uFiber;
+uniform float uFade, uHasCam, uExposure, uDpr;
 uniform vec4 uBox, uCamRect;
 in vec2 vS;
-float luma(vec2 uv) { return dot(texture(uCam, uv).rgb, vec3(0.299, 0.587, 0.114)); }
 out vec4 outColor;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
-vec4 scan() {
-  // The live picture becomes a radiograph: air dark, the body a glowing soft-tissue shadow, the cut
-  // edge of the skin a thin bright line. Before anything is found the whole window shows a negative.
-  float m = uFade > 0.001 ? texture(uMask, gl_FragCoord.xy / uRes).r : 0.0;
-  vec2 css = vec2(vS.x + uStage.x * 0.5, uStage.y * 0.5 - vS.y);
-  vec2 uv = (css - uCamRect.xy) / uCamRect.zw, px = 3.0 / uCamRect.zw;
-  float L = 0.5, detail = 0.0;
-  if (uHasCam > 0.5) {
-    L = luma(uv);
-    float blur = (luma(uv + vec2(px.x, 0.0)) + luma(uv - vec2(px.x, 0.0)) + luma(uv + vec2(0.0, px.y)) + luma(uv - vec2(0.0, px.y))) * 0.25;
-    detail = L - blur;
-  }
-  float inv = 1.0 - L;
-  float negative = 0.05 + 0.24 * pow(inv, 1.4) + abs(detail) * 1.6;
-  float thick = smoothstep(0.0, 1.0, m);
-  float body = 0.16 + 0.17 * thick + 0.10 * inv + abs(detail) * 0.9;
-  float air = 0.025 + 0.06 * pow(inv, 1.5) + abs(detail) * 0.5;
-  float skinLine = (smoothstep(0.03, 0.22, m) - smoothstep(0.25, 0.6, m)) * 0.22;
-  float v = mix(negative, mix(air, body, smoothstep(0.02, 0.35, m)) + skinLine, uFade);
-  v *= 0.93 + 0.07 * sin(css.y * 2.1);                                         // scan lines
-  v += (fract(sin(dot(gl_FragCoord.xy + fract(uTime * 7.3) * 113.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.045; // grain
-  vec2 hs = (uBox.zw - uBox.xy) * 0.5, q = abs(vS - (uBox.xy + uBox.zw) * 0.5) / hs;
-  v *= 1.0 - 0.45 * smoothstep(0.62, 1.0, max(q.x, q.y));                      // vignette
-  vec3 c = vec3(0.60, 0.80, 1.0) * v + vec3(0.04, 0.06, 0.09);
-  // sweeping scan beam with a short afterglow
-  float dy = vS.y - uSweep;
-  c += vec3(0.45, 0.85, 1.0) * uSweepAmp * (exp(-dy * dy / 5.0) * 0.8 + (dy > 0.0 ? exp(-dy / 26.0) * 0.12 : 0.0));
-  float edgeA = smoothstep(1.0, 0.985, max(q.x, q.y));
-  return vec4(c, 0.96 * uOn * edgeA);
-}
+${NOISE}
 void main() {
-  if (uXray > 0.5) { outColor = scan(); return; }
-  float m = texture(uMask, gl_FragCoord.xy / uRes).r;
+  vec2 fc = gl_FragCoord.xy / uRes;
+  float m = texture(uMask, fc).r;
   if (m < 0.02) discard;
-  float rimBand = 1.0 - smoothstep(0.18, 0.55, m);
-  vec3 deep = mix(vec3(0.10, 0.015, 0.02), vec3(0.22, 0.04, 0.04), noise(vS * 0.05) * 0.7 + noise(vS * 0.2) * 0.3);
-  vec3 fat = vec3(0.96, 0.82, 0.55), skin = vec3(0.90, 0.62, 0.55);
-  vec3 rimCol = mix(skin, fat, smoothstep(0.05, 0.3, m));
-  vec3 c = mix(deep, rimCol, rimBand * 0.85);
-  outColor = vec4(c, smoothstep(0.02, 0.22, m) * uFade);
+  // the wall's slope from how fast the mask rises: lit on the side facing the light
+  vec2 gm = vec2(dFdx(m), dFdy(m)) * 40.0;
+  vec3 wn = normalize(vec3(-gm, 1.0));
+  vec3 L = normalize(vec3(-0.45, 0.62, 0.65));
+  float wallLight = clamp(dot(wn, L) * 1.1, 0.25, 1.4);
+  // irregular cut: the layer boundaries wander a little
+  float mm = m + (n2(vS * 0.11) - 0.5) * 0.06 + (n2(vS * 0.4) - 0.5) * 0.02;
+  // ---- muscle: bundles of fibres running along the limb, wet, with seams between bundles ----
+  vec2 dir = normalize(uFiber), perp = vec2(-dir.y, dir.x);
+  vec2 warp = vec2(n2(vS * 0.02), n2(vS * 0.02 + 5.0)) * 18.0;
+  vec2 fp = vec2(dot(vS + warp, perp), dot(vS + warp, dir));
+  float bundle = n2(vec2(fp.x * 0.09, fp.y * 0.012));
+  float fibre = n2(vec2(fp.x * 0.9, fp.y * 0.05)) * 0.6 + n2(vec2(fp.x * 2.1, fp.y * 0.11)) * 0.4;
+  float seam = smoothstep(0.08, 0.0, abs(bundle - 0.5) - 0.02);
+  float hgt = bundle * 0.7 + fibre * 0.3 - seam * 0.5;
+  vec3 mus = mix(vec3(0.16, 0.018, 0.016), vec3(0.42, 0.055, 0.045), clamp(bundle * 0.6 + fibre * 0.55, 0.0, 1.0));
+  mus = mix(mus, vec3(0.07, 0.006, 0.006), seam * 0.8);
+  mus *= 0.85 + 0.3 * n2(vS * 0.03 + 11.0);
+  vec2 dh = vec2(dFdx(hgt), dFdy(hgt)) * 6.0 / uDpr;
+  vec3 mn = normalize(vec3(-dh, 1.0));
+  float mdif = max(dot(mn, L), 0.0) * 0.6 + 0.55;
+  float glint = pow(max(dot(mn, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 60.0) * 0.55;
+  vec3 c = mus * mdif + vec3(1.0, 0.92, 0.88) * glint;
+  c *= mix(1.0, 0.72, smoothstep(0.45, 1.0, m));                 // deeper toward the middle
+  // ---- shadows of the bones on the muscle: a sharp-ish cast shadow plus a wide soft one ----
+  vec2 off = vec2(14.0, -18.0) * uDpr / uRes, px = 8.0 * uDpr / uRes, px2 = 22.0 * uDpr / uRes;
+  float sh = texture(uShadow, fc - off).r * 0.3
+    + (texture(uShadow, fc - off + vec2(px.x, 0.0)).r + texture(uShadow, fc - off - vec2(px.x, 0.0)).r
+     + texture(uShadow, fc - off + vec2(0.0, px.y)).r + texture(uShadow, fc - off - vec2(0.0, px.y)).r) * 0.175;
+  float ao = (texture(uShadow, fc + vec2(px2.x, 0.0)).r + texture(uShadow, fc - vec2(px2.x, 0.0)).r
+     + texture(uShadow, fc + vec2(0.0, px2.y)).r + texture(uShadow, fc - vec2(0.0, px2.y)).r) * 0.25;
+  c *= (1.0 - 0.8 * sh) * (1.0 - 0.5 * ao);
+  // ---- the cut wall: skin (the person's own colour), dermis, fat lobules, fascia ----
+  vec3 skin = vec3(0.78, 0.55, 0.46);
+  if (uHasCam > 0.5) {
+    vec2 css = vec2(vS.x + uStage.x * 0.5, uStage.y * 0.5 - vS.y);
+    skin = texture(uCam, (css - uCamRect.xy) / uCamRect.zw).rgb;
+  }
+  vec2 cell = vS * 0.13 + vec2(n2(vS * 0.05), n2(vS * 0.05 + 3.0)) * 2.0;
+  float lob = n2(cell), lobSeam = smoothstep(0.06, 0.0, abs(n2(cell * 1.7) - 0.5) - 0.01);
+  vec3 fat = mix(vec3(0.86, 0.66, 0.34), vec3(0.98, 0.86, 0.58), lob);
+  fat = mix(fat, vec3(0.75, 0.38, 0.28), lobSeam * 0.6);              // tiny vessels between lobules
+  vec3 wall = toLinear(skin) * 0.9;
+  wall = mix(wall, toLinear(vec3(0.82, 0.52, 0.47)), smoothstep(0.05, 0.075, mm));
+  wall = mix(wall, toLinear(fat), smoothstep(0.085, 0.11, mm));
+  wall = mix(wall, toLinear(vec3(0.86, 0.80, 0.78)), smoothstep(0.27, 0.29, mm) * (1.0 - smoothstep(0.30, 0.33, mm)));
+  wall *= wallLight * mix(1.05, 0.55, smoothstep(0.08, 0.33, mm));    // the wall falls away into shadow
+  float wallMix = 1.0 - smoothstep(0.30, 0.345, mm);
+  c = mix(c * mix(0.35, 1.0, smoothstep(0.32, 0.62, mm)), wall, wallMix);
+  c *= uExposure;
+  outColor = vec4(finish(c), smoothstep(0.02, 0.08, m) * uFade);
 }`;
 
 export class ArmView {
@@ -210,17 +247,19 @@ export class ArmView {
     this.maskCanvas = document.createElement('canvas');
     this.maskTex = new THREE.CanvasTexture(this.maskCanvas);
     this.maskTex.minFilter = this.maskTex.magFilter = THREE.LinearFilter;
+    this.shadowRT = new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
     this.shared = {
       uSeg: { value: this.seg }, uMask: { value: this.maskTex }, uRes: { value: new THREE.Vector2(1, 1) },
-      uBox: { value: new THREE.Vector4() }, uUseMask: { value: 1 }, uXray: { value: 0 }, uFade: { value: 1 }, uTime: { value: 0 },
+      uBox: { value: new THREE.Vector4() }, uUseMask: { value: 1 }, uFade: { value: 1 },
       uCam: { value: null }, uCamRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uStage: { value: new THREE.Vector2(1, 1) }, uHasCam: { value: 0 },
-      uOn: { value: 1 }, uSweep: { value: -1e5 }, uSweepAmp: { value: 0 }, uReveal: { value: -1e5 },
+      uExposure: { value: 1 }, uShadow: { value: this.shadowRT.texture }, uFiber: { value: new THREE.Vector2(0, 1) }, uDpr: { value: 1 },
     };
     this.cavity = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3, uniforms: this.shared, vertexShader: CAV_VERT, fragmentShader: CAV_FRAG,
       transparent: true, depthTest: false, depthWrite: false,
     }));
     this.cavity.frustumCulled = false; this.cavity.renderOrder = 0;
+    this.silMat = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, uniforms: this.shared, vertexShader: VERT, fragmentShader: SIL_FRAG, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
     this.meshes = {};
     this.visible = { bone: true, artery: true, vein: true, nerve: true, organ: true, muscle: true, tissue: false };
   }
@@ -235,7 +274,7 @@ export class ArmView {
       const opaque = st.alpha >= 1;
       const mat = new THREE.ShaderMaterial({
         glslVersion: THREE.GLSL3, vertexShader: VERT, fragmentShader: FRAG,
-        uniforms: { ...this.shared, uColor: { value: new THREE.Color(...st.color) }, uAlpha: { value: st.alpha }, uPeel: { value: st.peel }, uDensity: { value: scanDensity(kind) } },
+        uniforms: { ...this.shared, uColor: { value: new THREE.Color(...st.color) }, uAlpha: { value: st.alpha }, uPeel: { value: st.peel }, uShade: { value: SHADE(kind) } },
         transparent: true, depthWrite: opaque, depthTest: true, side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(g, mat);
@@ -243,8 +282,7 @@ export class ArmView {
       this.scene.add(mesh); this.meshes[kind] = mesh;
     }
   }
-  /** Draw the arm. box: screen px {x0,y0,x1,y1} (centre origin, y up). opts: {mask, xray, fade, time, cavity} */
-  /** The live camera picture (video or canvas), sampled by the X-ray scan look. */
+  /** The live camera picture (video or canvas): the skin colour at the cut edge comes from it. */
   setSource(el) {
     if (this.srcEl === el) return;
     if (this.camTex) this.camTex.dispose();
@@ -253,31 +291,39 @@ export class ArmView {
     if (this.camTex) { this.camTex.flipY = false; this.camTex.minFilter = this.camTex.magFilter = THREE.LinearFilter; this.camTex.generateMipmaps = false; }
     this.shared.uCam.value = this.camTex; this.shared.uHasCam.value = el ? 1 : 0;
   }
-  render(W, H, box, { mask = true, xray = false, fade = 1, time = 0, cavity = true, on = 1, cam = null, sweep = -1e5, sweepAmp = 0, reveal = -1e5 } = {}) {
+  /**
+   * Draw. box: screen px {x0,y0,x1,y1} (centre origin, y up).
+   * opts: mask (clip to the opening), fade, cavity, cam (picture placement), exposure, fiber (screen dir).
+   */
+  render(W, H, box, { mask = true, fade = 1, cavity = true, cam = null, exposure = 1, fiber = null } = {}) {
     const r = this.renderer, s = this.shared;
-    s.uOn.value = on; s.uSweep.value = sweep; s.uSweepAmp.value = sweepAmp; s.uReveal.value = reveal; s.uStage.value.set(W, H);
-    if (cam) s.uCamRect.value.set(cam.ox, cam.oy, cam.dw, cam.dh);
-    if (this.camTex && !(this.srcEl instanceof HTMLVideoElement)) this.camTex.needsUpdate = true;
-    for (const m of Object.values(this.meshes)) {
-      const add = xray, mat = m.material;
-      if ((mat.blending === THREE.AdditiveBlending) !== add) {
-        mat.blending = add ? THREE.AdditiveBlending : THREE.NormalBlending;
-        mat.depthTest = !add; mat.depthWrite = !add && KIND_STYLE[m.userData.kind].alpha >= 1; mat.needsUpdate = true;
-      }
-    }
     const buf = r.getDrawingBufferSize(new THREE.Vector2());
-    s.uRes.value.copy(buf);
+    s.uRes.value.copy(buf); s.uDpr.value = r.getPixelRatio(); s.uStage.value.set(W, H);
     s.uBox.value.set(box.x0, box.y0, box.x1, box.y1);
-    s.uUseMask.value = mask ? 1 : 0; s.uXray.value = xray ? 1 : 0; s.uFade.value = fade; s.uTime.value = time;
-    this.cavity.visible = cavity && mask;
+    s.uUseMask.value = mask ? 1 : 0; s.uFade.value = fade; s.uExposure.value = exposure;
+    if (cam) s.uCamRect.value.set(cam.ox, cam.oy, cam.dw, cam.dh);
+    if (fiber) s.uFiber.value.set(fiber.x, fiber.y);
+    if (this.camTex && !(this.srcEl instanceof HTMLVideoElement)) this.camTex.needsUpdate = true;
     for (const [kind, m] of Object.entries(this.meshes)) m.visible = !!this.visible[GROUP(kind)] && fade > 0.002;
     this.camera.left = -W / 2; this.camera.right = W / 2; this.camera.top = H / 2; this.camera.bottom = -H / 2;
     this.camera.updateProjectionMatrix();
+    this.cavity.visible = cavity && mask;
+    if (this.cavity.visible) {
+      // bone silhouettes into a small target, for the soft shadows on the flesh
+      const sw = Math.max(4, Math.round(buf.x / 3)), sh = Math.max(4, Math.round(buf.y / 3));
+      if (this.shadowRT.width !== sw || this.shadowRT.height !== sh) this.shadowRT.setSize(sw, sh);
+      const saved = new Map();
+      for (const m of Object.values(this.meshes)) { saved.set(m, m.material); m.material = this.silMat; if (m.userData.kind !== 'bone') m.visible = false; }
+      this.cavity.visible = false;
+      r.setRenderTarget(this.shadowRT); r.setClearColor(0x000000, 1); r.clear(); r.render(this.scene, this.camera);
+      r.setRenderTarget(null); r.setClearColor(0x000000, 0);
+      for (const [m, mat] of saved) { m.material = mat; m.visible = !!this.visible[GROUP(m.userData.kind)] && fade > 0.002; }
+      this.cavity.visible = true;
+    }
     // Only the window needs drawing in the camera view: saves a lot of work on a phone.
     if (mask) {
-      const W2 = W, H2 = H;
       r.setScissorTest(true);
-      r.setScissor(W2 / 2 + box.x0 - 2, H2 / 2 + box.y0 - 2, box.x1 - box.x0 + 4, box.y1 - box.y0 + 4);
+      r.setScissor(W / 2 + box.x0 - 2, H / 2 + box.y0 - 2, box.x1 - box.x0 + 4, box.y1 - box.y0 + 4);
     }
     r.render(this.scene, this.camera);
     r.setScissorTest(false);
