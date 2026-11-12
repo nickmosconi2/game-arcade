@@ -18,29 +18,32 @@ a DICOM file (CT, MRI or X-ray); the camera only tells the app where your arm is
 
 ## Phase 0: browser MVP (built, in `web/`)
 
-Runs in Safari, Chrome or any modern browser. No install, files never leave the device.
-The user loads a scan and points the camera at the arm. Nothing else to set.
+Opens straight into the camera with a real CT of a left forearm and hand already loaded
+(Visible Human Female, U.S. National Library of Medicine, public domain). Tap **X-RAY** and a
+framed window appears in the viewfinder; inside it you see the bones and muscle of the part of
+the arm behind it. Move the phone (or the arm) to look at a different part or from a different
+angle.
 
 | Piece | State |
 | --- | --- |
-| DICOM reader (implicit/explicit little endian, uncompressed, baseline JPEG, multi-frame, zip) | Working |
-| Automatic scan analysis: finds the hand, wrist, forearm direction and thumb side from the bones | Working on the demo arm CT; needs real arm scans |
-| X-ray vision: full-screen camera, anatomy drawn inside the arm's own outline, fading into real skin at the edges | Working with real hand tracking on test photos; **needs an on-phone test** |
-| Follows a bent wrist by finding the forearm in the camera picture | Working on test photos |
-| 3D view (bone / muscle / skin) and slice view (pinch, zoom, presets) | Working |
-
-How it lines up with no user input: the hand tracker finds the wrist, the hand's direction
-and its real size (an adult hand is about 92 mm from wrist to middle knuckle). The scan's
-wrist, forearm direction and thumb side are worked out from its bones when it loads. The
-forearm direction in the camera picture comes from the skin-coloured area behind the wrist.
+| Real arm CT: cut out of the full-body Visible Human scan, separated from the hip and torso, 1 mm, shipped as a DICOM series | Done |
+| Readable view: CT numbers turned into shaded ivory bone and red muscle, with bone names (radius, ulna, carpals, metacarpals, phalanges, thumb, elbow, humerus) and the region under the window | Done |
+| "X-ray film" view as an alternative | Done |
+| True 3D: the window ray-marches the CT volume, so turning the arm or phone shows a different angle | Done |
+| Lock-on from the hand (position, 3D turn, real size), corrected along the visible forearm | Tested on photos |
+| Stays locked when the phone is close and the hand is out of view (optical flow on the skin) | Tested on simulated close-ups |
+| Left / right arm switch (mirrors the scan) | Done |
+| 3D view with orbit and labels; slice view | Done |
 
 Known gaps:
 
-1. Only hand / wrist / forearm scans get X-ray vision; other body parts open in 3D or Slices.
-2. Compressed scans (JPEG-LS, JPEG 2000, JPEG lossless, RLE) are not decoded yet. Many
-   hospital discs use these.
-3. A flat X-ray assumes the fingers point toward the top of the picture.
-4. Twisting the forearm moves the overlay with the hand, but the bones on screen keep the scan's pose.
+1. Not yet tried on a live iPhone camera; tracking smoothness and speed need tuning there.
+2. Close-up tracking (no hand in view) follows sliding, turning and zooming, but not twisting
+   the forearm; show the hand again to re-anchor.
+3. The scan keeps the pose the arm had in the scanner; it does not bend with your wrist or fingers.
+4. The Visible Human scan's field of view clips one side of the elbow, and the 1990s scanner
+   left horizontal streaks.
+5. Compressed DICOM (JPEG-LS, JPEG 2000, RLE) still not decoded.
 
 ## Phase 1: make the browser version solid (about 1 to 2 weeks)
 
@@ -64,7 +67,7 @@ can do much better on an iPhone with LiDAR (Pro models):
 | UI | SwiftUI; same three modes (Slices, 3D, X-ray vision) |
 | DICOM | Port the reader to Swift; DCMTK or GDCM for compressed formats |
 | Rendering | RealityKit for surfaces, Metal ray-marching for volumes |
-| Tracking | ARKit world tracking + Vision hand and body pose, placed in true 3D using LiDAR depth |
+| Tracking | ARKit world tracking + Vision hand and body pose, placed in true 3D using LiDAR depth (Safari cannot read the LiDAR sensor, so this needs the native app) |
 | Registration | Fit the scan's skin surface to the LiDAR surface of the arm (ICP) for automatic alignment; optional printed marker for extra stability |
 | Occlusion | Use LiDAR depth so the anatomy appears inside the arm rather than floating on top |
 | Files | Open from Files, AirDrop, and "Open in" from mail; everything stays on device |

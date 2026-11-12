@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#000000">
 <title>X-ray Viewer</title>
 <style>
-  :root { --line:#ffffff22; --text:#f2f5f8; --dim:#a9b4c0; --accent:#6fd0ff; --glass:rgba(12,16,22,.55); }
+  :root { --line:#ffffff26; --text:#f2f5f8; --dim:#b3bdc8; --accent:#6fd0ff; --glass:rgba(10,14,20,.55); }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
   html, body { margin:0; height:100%; background:#000; color:var(--text); font:15px/1.35 -apple-system, system-ui, "Segoe UI", sans-serif; overflow:hidden; overscroll-behavior:none; }
   #stage { position:fixed; inset:0; touch-action:none; background:#000; }
@@ -15,24 +15,49 @@
   #video { object-fit:cover; }
   button { font:inherit; color:var(--text); background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:7px 13px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
   button.on { background:var(--accent); border-color:var(--accent); color:#03131d; font-weight:600; }
-  #top { position:fixed; top:0; left:0; right:0; z-index:5; display:flex; align-items:center; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 10px 8px; pointer-events:none; }
+  #top { position:fixed; top:0; left:0; right:0; z-index:6; display:flex; align-items:center; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 10px 8px; pointer-events:none; }
   #top > * { pointer-events:auto; }
   #modes { display:flex; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:2px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
-  #modes button { border:0; background:none; padding:6px 12px; font-size:13px; color:var(--dim); backdrop-filter:none; -webkit-backdrop-filter:none; }
+  #modes button { border:0; background:none; padding:6px 11px; font-size:13px; color:var(--dim); backdrop-filter:none; -webkit-backdrop-filter:none; }
   #modes button.on { background:#ffffff26; color:#fff; font-weight:600; }
-  #title { flex:1; min-width:0; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 3px #000; pointer-events:none; }
+  #title { flex:1; min-width:0; font-size:11px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 3px #000; pointer-events:none; }
   #openBtn { font-size:13px; }
-  #hint { position:fixed; left:0; right:0; bottom:calc(26px + env(safe-area-inset-bottom)); z-index:4; text-align:center; pointer-events:none; padding:0 20px; transition:opacity .35s; }
+
+  /* The X-ray window */
+  #box { position:fixed; z-index:3; pointer-events:none; display:none; }
+  #box .c { position:absolute; width:26px; height:26px; border:3px solid var(--accent); filter:drop-shadow(0 0 4px #6fd0ff99); }
+  #box .tl { left:-2px; top:-2px; border-right:0; border-bottom:0; border-top-left-radius:10px; }
+  #box .tr { right:-2px; top:-2px; border-left:0; border-bottom:0; border-top-right-radius:10px; }
+  #box .bl { left:-2px; bottom:-2px; border-right:0; border-top:0; border-bottom-left-radius:10px; }
+  #box .br { right:-2px; bottom:-2px; border-left:0; border-top:0; border-bottom-right-radius:10px; }
+  #box .edge { position:absolute; inset:0; border:1px solid #6fd0ff55; border-radius:10px; }
+  #region { position:absolute; left:0; right:0; top:100%; margin-top:10px; text-align:center; }
+  #region span { display:inline-block; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:14px; font-weight:600; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+  #region span:empty { display:none; }
+  #labels { position:fixed; inset:0; z-index:4; pointer-events:none; }
+  .lbl { position:absolute; transform:translate(-50%,-50%); white-space:nowrap; font-size:12px; font-weight:600; color:#fff; text-shadow:0 1px 3px #000, 0 0 8px #000; transition:opacity .2s; }
+  .lbl::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px #03131d; margin-right:6px; vertical-align:1px; }
+
+  #hint { position:fixed; left:0; right:0; top:calc(58px + env(safe-area-inset-top)); z-index:5; text-align:center; pointer-events:none; padding:0 20px; transition:opacity .35s; }
   #hint span { display:inline-block; background:var(--glass); border:1px solid var(--line); border-radius:18px; padding:8px 16px; font-size:14px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
   #hint.off { opacity:0; }
-  #layerBtn { position:fixed; right:12px; top:calc(56px + env(safe-area-inset-top)); z-index:6; font-size:13px; display:none; }
-  #panel { position:fixed; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:5; display:none; background:var(--glass); border:1px solid var(--line); border-radius:16px; padding:8px 12px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+  #lock { position:fixed; left:12px; top:calc(58px + env(safe-area-inset-top)); z-index:5; font-size:12px; color:var(--dim); text-shadow:0 1px 3px #000; display:none; }
+  #lock b { color:#7dffb0; }
+
+  #dock { position:fixed; left:0; right:0; bottom:calc(18px + env(safe-area-inset-bottom)); z-index:6; display:none; align-items:center; justify-content:center; gap:14px; }
+  #xrayBtn { width:74px; height:74px; border-radius:50%; padding:0; font-size:12px; font-weight:700; letter-spacing:.02em; border:3px solid #ffffffcc; background:#ffffff22; }
+  #xrayBtn.on { background:var(--accent); color:#03131d; border-color:#fff; box-shadow:0 0 22px #6fd0ffaa; }
+  #styleBtn { font-size:13px; min-width:92px; }
+  #credit { position:fixed; left:0; right:0; bottom:calc(2px + env(safe-area-inset-bottom)); z-index:5; text-align:center; font-size:10px; color:#ffffff88; pointer-events:none; text-shadow:0 1px 2px #000; }
+
+  #panel { position:fixed; left:10px; right:10px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:5; display:none; background:var(--glass); border:1px solid var(--line); border-radius:16px; padding:8px 12px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
   .row { display:flex; align-items:center; gap:10px; margin:4px 0; }
   .row input[type=range] { flex:1; min-width:0; accent-color:var(--accent); }
   .row output { width:54px; text-align:right; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; }
   .chips button { padding:5px 11px; font-size:13px; backdrop-filter:none; -webkit-backdrop-filter:none; background:#ffffff14; }
   .chips button.on { background:var(--accent); }
+
   #sheet { position:fixed; inset:0; z-index:10; background:#000d; display:flex; align-items:flex-end; justify-content:center; }
   #sheet.hidden, #busy.hidden { display:none; }
   #sheet .card { background:#10161e; border:1px solid var(--line); border-radius:20px 20px 0 0; width:min(560px,100%); max-height:92vh; overflow:auto; padding:18px 16px calc(16px + env(safe-area-inset-bottom)); }
@@ -53,9 +78,12 @@
   <canvas id="c3d"></canvas>
 </div>
 
+<div id="box"><div class="edge"></div><div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div><div id="region"><span id="regionText"></span></div></div>
+<div id="labels"></div>
+
 <div id="top">
   <div id="modes">
-    <button data-mode="cam" class="on">X-ray</button>
+    <button data-mode="cam" class="on">Camera</button>
     <button data-mode="3d">3D</button>
     <button data-mode="2d">Slices</button>
   </div>
@@ -64,7 +92,14 @@
 </div>
 
 <div id="hint" class="off"><span id="hintText"></span></div>
-<button id="layerBtn">Bones only</button>
+<div id="lock"><b>●</b> Locked to arm</div>
+
+<div id="dock">
+  <button id="styleBtn">Anatomy</button>
+  <button id="xrayBtn">X-RAY</button>
+  <button id="flipBtn" style="font-size:13px;min-width:92px">Left arm</button>
+</div>
+<div id="credit"></div>
 
 <div id="panel">
   <div data-for="2d">
@@ -72,22 +107,19 @@
     <div class="row"><div class="chips" id="presets"></div></div>
   </div>
   <div data-for="3d">
-    <div class="row"><div class="chips" id="layers"></div></div>
+    <div class="row"><div class="chips" id="view3d"></div></div>
   </div>
 </div>
 
-<div id="sheet">
+<div id="sheet" class="hidden">
   <div class="card">
     <h2>Load a scan</h2>
-    <p>Then point the camera at that part of your body. Files stay on this device. Not for diagnosis.</p>
-    <button class="opt main" id="pickBtn">Open my DICOM files<small>Pick every file of the series, or one .zip of the folder.</small></button>
-    <button class="opt" data-sample="samples/phantom-forearm-ct.zip">Demo: forearm and hand CT<small>Synthetic, life-size. Use it to try X-ray vision on your own arm.</small></button>
-    <button class="opt" data-sample="samples/phantom-forearm-xray.dcm">Demo: forearm X-ray<small>Synthetic flat film of the same arm.</small></button>
-    <button class="opt" data-sample="samples/real-torso-ct-lite.zip">Real CT: torso<small>Human whole-body CT, 11 MB. 3D and slices only for now.</small></button>
-    <button class="opt" data-sample="samples/real-xray-ankle.dcm">Real X-ray: ankle<small>Human radiograph, 6 MB. Slices only for now.</small></button>
+    <p>Files stay on this device. For viewing and learning only, not for diagnosis.</p>
+    <button class="opt main" data-sample="samples/vhf-left-arm-ct.zip">Real CT: left forearm and hand<small>Visible Human Female, U.S. National Library of Medicine. 1 mm slices, 2 MB.</small></button>
+    <button class="opt" id="pickBtn">Open my own DICOM files…<small>Pick every file of the series, or one .zip of the folder.</small></button>
     <input type="file" id="file" multiple hidden>
     <div id="err"></div>
-    <button class="opt" id="closeSheet" hidden style="text-align:center">Cancel</button>
+    <button class="opt" id="closeSheet" style="text-align:center">Cancel</button>
   </div>
 </div>
 <div id="busy" class="hidden"><div id="busyText">Loading…</div></div>

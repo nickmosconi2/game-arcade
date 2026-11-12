@@ -30,7 +30,8 @@ export async function createHandTracker() {
         return undefined;
       }
       if (!r.landmarks || !r.landmarks.length) return null;
-      return { image: r.landmarks[0], world: r.worldLandmarks[0] };
+      const h = r.handednesses && r.handednesses[0] && r.handednesses[0][0];
+      return { image: r.landmarks[0], world: r.worldLandmarks[0], label: h ? h.categoryName : '', score: h ? h.score : 0 };
     },
   };
 }
