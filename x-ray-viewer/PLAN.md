@@ -18,30 +18,31 @@ a DICOM file (CT, MRI or X-ray); the camera only tells the app where your arm is
 
 ## Phase 0: browser MVP (built, in `web/`)
 
-Opens to the normal camera. Tap **X-RAY**: a window appears, and wherever your arm passes behind
-it the skin is "cut open" to show what is inside: bones, muscles and tendons, arteries and veins,
-each named. Everything is posed from your own tracked hand, bone by bone, so the finger bones bend
-and spread with your fingers.
+Opens to the normal camera. Tap **X-RAY**: a window appears, and wherever a body passes behind it
+the skin is "cut open" to show what is inside: bones, muscles, organs, arteries, veins and the
+brain and spinal cord. A caption names the region and the main structure in the middle
+("Chest · Heart"), and labels can be turned off.
 
 | Piece | State |
 | --- | --- |
-| Anatomy: BodyParts3D 4.0 (DBCLS, CC BY 4.0), left and right arm, 149 structures each: 30 bones, muscles with tendons, arteries, veins | Done |
-| Rig: 21 hand joints computed on the model's skeleton; every vertex bound to forearm, palm or one of 15 finger bones | Done |
-| Posing: palm fitted to the user's wrist and knuckles (rotation + size), each finger bone aimed along the user's finger, forearm swung to the arm seen in the picture | Tested on photos |
-| Opening clipped to the arm's own outline, with a cut skin/fat rim, dark cavity and inner shadow; muscle thins toward the middle so vessels and bone show | Done |
-| Layers (all / vessels + bone / bone), anatomy or X-ray-film look, labels and a caption for the bone in the middle | Done |
-| Stays locked when the phone is close and the hand is out of view (optical flow) | Tested on simulated close-ups |
-| Left/right arm picked from hand detection, with a manual switch | Done |
-| 3D model view with layer toggles | Done |
+| Anatomy: BodyParts3D 4.0 whole body (DBCLS, CC BY 4.0), about 1,000 structures, 10.9 MB download | Done |
+| Rig: 44 segments (torso, head, both arms and legs, hands, 15 finger bones per hand); every vertex bound to one or two segments | Done |
+| Body posing from MediaPipe pose tracking (torso, head, limbs) plus hand tracking for exact finger bones; trackers alternate frames | Tested on photos |
+| Opening clipped to the body outline (pose segmentation) and the hands, with a cut skin/fat rim, dark cavity and inner shadow | Done |
+| Hand-only mode when only a hand is in view (arm and hand posed from the hand) | Tested on photos |
+| Labels in plain words for organs ("Heart", "Kidney"), region caption, labels on/off | Done |
+| Layers (all / organs + vessels / bone), anatomy or X-ray-film look | Done |
+| Stays locked when the phone is close and nothing is detected (optical flow moves bones and outline) | Tested on simulated close-ups |
+| 3D model view of the whole body with orbit, pinch and layer toggles | Done |
 | CT/DICOM viewing (real Visible Human arm CT, slices, volume rendering) | Built earlier; parked, to be merged back in |
 
 Known gaps:
 
-1. Not yet tuned on a live iPhone camera.
-2. The forearm follows the hand's turn but not a separate forearm twist when the hand is out of view.
-3. Muscles move with the nearest bone; they do not bulge or slide like real muscle.
-4. Peripheral nerves are not in BodyParts3D; adding them needs another source (for example Z-Anatomy).
-5. It is a reference body, not the user's anatomy.
+1. Not yet tuned on a live iPhone camera; pose plus hand tracking may be slow on older phones.
+2. Body shape is fitted by size and joint positions only: a reference body, not the user's anatomy.
+3. Muscles and organs move with the nearest bone; they do not bulge, slide or breathe.
+4. Peripheral nerves, skin and reproductive organs are not included.
+5. Spine bending is approximated by the torso fit (no separate chest/pelvis twist yet).
 
 ## Phase 1: make the browser version solid (about 1 to 2 weeks)
 

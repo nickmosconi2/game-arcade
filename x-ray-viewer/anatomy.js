@@ -3,21 +3,39 @@
 // model can be posed bone by bone from the user's tracked hand.
 import * as THREE from './vendor/three.module.min.js';
 
-export const SEG_COUNT = 17;
+export const SEG_COUNT = 44;
 export const KIND_STYLE = {
-  bone:   { color: [0.93, 0.88, 0.76], alpha: 1.0, order: 2, peel: 0 },
-  artery: { color: [0.86, 0.10, 0.12], alpha: 1.0, order: 3, peel: 0 },
-  vein:   { color: [0.20, 0.32, 0.86], alpha: 1.0, order: 3, peel: 0 },
-  muscle: { color: [0.74, 0.20, 0.17], alpha: 0.88, order: 5, peel: 0.18 },
-  tissue: { color: [0.90, 0.85, 0.80], alpha: 0.55, order: 4, peel: 0.3 },
+  bone:         { color: [0.93, 0.88, 0.76], alpha: 1.0, order: 2, peel: 0 },
+  artery:       { color: [0.86, 0.10, 0.12], alpha: 1.0, order: 3, peel: 0 },
+  vein:         { color: [0.20, 0.32, 0.86], alpha: 1.0, order: 3, peel: 0 },
+  nerve:        { color: [0.96, 0.85, 0.35], alpha: 1.0, order: 3, peel: 0 },
+  organ_heart:  { color: [0.62, 0.10, 0.12], alpha: 1.0, order: 3, peel: 0 },
+  organ_lung:   { color: [0.93, 0.62, 0.64], alpha: 0.82, order: 4, peel: 0.55 },
+  organ_airway: { color: [0.90, 0.78, 0.74], alpha: 1.0, order: 3, peel: 0 },
+  organ_liver:  { color: [0.48, 0.16, 0.12], alpha: 1.0, order: 3, peel: 0 },
+  organ_gut:    { color: [0.90, 0.60, 0.55], alpha: 1.0, order: 3, peel: 0 },
+  organ_kidney: { color: [0.55, 0.18, 0.15], alpha: 1.0, order: 3, peel: 0 },
+  organ_gland:  { color: [0.85, 0.62, 0.30], alpha: 1.0, order: 3, peel: 0 },
+  organ_eye:    { color: [0.95, 0.95, 0.93], alpha: 1.0, order: 3, peel: 0 },
+  organ_other:  { color: [0.85, 0.55, 0.55], alpha: 1.0, order: 3, peel: 0 },
+  muscle:       { color: [0.74, 0.20, 0.17], alpha: 0.88, order: 5, peel: 0.18 },
+  tissue:       { color: [0.90, 0.85, 0.80], alpha: 0.5, order: 4, peel: 0.3 },
 };
+/** Display group for each tissue kind (layers, labels). */
+export const GROUP = (k) => (k.startsWith('organ') ? 'organ' : k);
 
-/** Load one arm ('left' | 'right'): geometry per tissue kind plus the rest-pose joints. */
-export async function loadArm(side, base = 'models') {
-  const [info, buf] = await Promise.all([
-    fetch(`${base}/arm-${side}.json`).then((r) => { if (!r.ok) throw new Error(`model not found (${r.status})`); return r.json(); }),
-    fetch(`${base}/arm-${side}.bin`).then((r) => r.arrayBuffer()),
-  ]);
+/** Load the whole-body model: geometry per tissue kind plus the rest-pose joints. */
+export async function loadBody(base = 'models', onProgress) {
+  const info = await fetch(`${base}/body.json`).then((r) => { if (!r.ok) throw new Error(`model not found (${r.status})`); return r.json(); });
+  const res = await fetch(`${base}/body.bin`);
+  if (!res.ok) throw new Error(`model not found (${res.status})`);
+  let buf;
+  const total = info.layout.idx[0] + info.layout.idx[1];
+  if (res.body && onProgress) {
+    const reader = res.body.getReader(), out = new Uint8Array(total); let got = 0;
+    for (;;) { const { done, value } = await reader.read(); if (done) break; out.set(value, got); got += value.length; onProgress(got / total); }
+    buf = out.buffer;
+  } else buf = await res.arrayBuffer();
   const L = info.layout, nv = info.verts;
   const pos = new Float32Array(buf, L.pos[0], nv * 3);
   const nrm = new Int8Array(buf, L.nrm[0], nv * 4);
@@ -46,10 +64,11 @@ export async function loadArm(side, base = 'models') {
     g.setIndex(new THREE.BufferAttribute(I, 1));
     groups[kind] = g;
   }
-  const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+  const v3 = (a) => (a ? new THREE.Vector3(a[0], a[1], a[2]) : null);
   return {
-    side, info, groups,
-    joints: info.landmarks.map(v3), elbow: v3(info.elbow),
+    info, groups,
+    pose: info.pose.map(v3),
+    hands: { left: info.hands.left.map(v3), right: info.hands.right.map(v3) },
     parts: info.parts.map((p) => ({ ...p, center: v3(p.c) })),
   };
 }
@@ -155,9 +174,9 @@ export class ArmView {
     }));
     this.cavity.frustumCulled = false; this.cavity.renderOrder = 0;
     this.meshes = {};
-    this.visible = { bone: true, artery: true, vein: true, muscle: true, tissue: false };
+    this.visible = { bone: true, artery: true, vein: true, nerve: true, organ: true, muscle: true, tissue: false };
   }
-  setArm(arm) {
+  setModel(arm) {
     for (const m of Object.values(this.meshes)) { this.scene.remove(m); m.material.dispose(); }
     this.scene.remove(this.cavity);
     this.meshes = {};
@@ -184,16 +203,23 @@ export class ArmView {
     s.uBox.value.set(box.x0, box.y0, box.x1, box.y1);
     s.uUseMask.value = mask ? 1 : 0; s.uXray.value = xray ? 1 : 0; s.uFade.value = fade; s.uTime.value = time;
     this.cavity.visible = cavity && mask;
-    for (const [kind, m] of Object.entries(this.meshes)) m.visible = !!this.visible[kind] && (!xray || kind === 'bone');
+    for (const [kind, m] of Object.entries(this.meshes)) m.visible = !!this.visible[GROUP(kind)] && (!xray || kind === 'bone');
     this.camera.left = -W / 2; this.camera.right = W / 2; this.camera.top = H / 2; this.camera.bottom = -H / 2;
     this.camera.updateProjectionMatrix();
+    // Only the window needs drawing in the camera view: saves a lot of work on a phone.
+    if (mask) {
+      const W2 = W, H2 = H;
+      r.setScissorTest(true);
+      r.setScissor(W2 / 2 + box.x0 - 2, H2 / 2 + box.y0 - 2, box.x1 - box.x0 + 4, box.y1 - box.y0 + 4);
+    }
     r.render(this.scene, this.camera);
+    r.setScissorTest(false);
   }
   /**
    * Paint the opening mask: the user's arm silhouette (fingers, palm, forearm) inside the window.
    * shapes: {caps: [[x0,y0,x1,y1,width],...], polys: [[[x,y],...],...]} in CSS px (top-left origin).
    */
-  paintMask(W, H, box, shapes, scale = 0.5) {
+  paintMask(W, H, box, shapes, outline = null, scale = 0.5) {
     const c = this.maskCanvas, w = Math.max(2, Math.round(W * scale)), h = Math.max(2, Math.round(H * scale));
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; this.maskTex.dispose(); this.maskTex = new THREE.CanvasTexture(c); this.maskTex.minFilter = this.maskTex.magFilter = THREE.LinearFilter; this.shared.uMask.value = this.maskTex; }
     const x = c.getContext('2d');
@@ -210,6 +236,14 @@ export class ArmView {
     x.fillStyle = '#fff'; x.strokeStyle = '#fff'; x.lineCap = 'round'; x.lineJoin = 'round';
     for (const poly of shapes.polys) { x.beginPath(); poly.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath(); x.fill(); }
     for (const [x0, y0, x1, y1, lw] of shapes.caps) { x.lineWidth = lw; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke(); }
+    // Body outline from segmentation: an image whose alpha is "person", placed at {x, y, w, h} CSS px.
+    if (outline) {
+      x.save();
+      const M = outline.M; // extra move picked up from optical flow while the body tracker can't see
+      if (M) x.transform(M.a, M.b, M.c, M.d, M.e, M.f);
+      x.drawImage(outline.canvas, outline.x, outline.y, outline.w, outline.h);
+      x.restore();
+    }
     x.restore();
     // Shrink slightly so the anatomy sits inside the real skin, and fade at the window's border.
     this.maskTex.needsUpdate = true;
