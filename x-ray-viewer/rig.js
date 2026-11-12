@@ -11,7 +11,7 @@ export const FINGER_SEGS = [
   [11, 13, 14, 1], [12, 14, 15, 11], [13, 15, 16, 12],
   [14, 17, 18, 1], [15, 18, 19, 14], [16, 19, 20, 15],
 ];
-const PALM = [0, 1, 5, 9, 13, 17];
+const PALM = [0, 5, 9, 13, 17];   // wrist and knuckles: the rigid part of the hand
 
 /** Rotation (Matrix4) that best maps centred src onto centred dst (Horn's quaternion method). */
 function bestRotation(src, dst) {
@@ -97,17 +97,21 @@ export function solveArm(arm, P, forearmDir, prevDelta = 0) {
   seg[0].makeTranslation(w0.x, w0.y, w0.z).multiply(new THREE.Matrix4().makeRotationZ(delta))
     .multiply(new THREE.Matrix4().makeTranslation(-w0.x, -w0.y, -w0.z)).multiply(palm);
 
-  // Fingers, from the knuckles outward.
+  // Fingers: every bone is laid exactly from the user's joint to the next one (no build-up of error).
   const n = new THREE.Vector3().crossVectors(R[5].clone().sub(R[0]), R[17].clone().sub(R[0])).normalize().transformDirection(palm);
+  const across = R[17].clone().sub(R[5]).transformDirection(palm);
   const rotOnly = new THREE.Matrix4().extractRotation(palm);
   for (const [s, a, b, parent] of FINGER_SEGS) {
-    const joint = R[a].clone().applyMatrix4(seg[parent]);
+    const joint = P[a];
     const restDir = R[b].clone().sub(R[a]).transformDirection(rotOnly);
     const userDir = P[b].clone().sub(P[a]);
     const restLen = R[b].distanceTo(R[a]) * scale, userLen = userDir.length();
-    const k = scale * Math.max(0.8, Math.min(1.25, userLen / Math.max(restLen, 1e-3)));
     if (userLen < 1e-3) { seg[s].copy(seg[parent]); continue; }
-    const Q = frame(userDir, n).multiply(frame(restDir, n).transpose());
+    const k = scale * Math.max(0.6, Math.min(1.6, userLen / Math.max(restLen, 1e-3)));
+    // Twist reference: the palm's normal, or the line across the knuckles when a finger points along it.
+    const u = userDir.clone().normalize();
+    const ref = Math.abs(u.dot(n)) < 0.8 ? n : across;
+    const Q = frame(userDir, ref).multiply(frame(restDir, ref).transpose());
     seg[s].makeTranslation(joint.x, joint.y, joint.z).multiply(Q).multiply(rotOnly)
       .multiply(new THREE.Matrix4().makeScale(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-R[a].x, -R[a].y, -R[a].z));
   }

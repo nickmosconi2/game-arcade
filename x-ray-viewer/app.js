@@ -18,7 +18,7 @@ const LAYERS = [
 
 const state = {
   mode: 'cam', arms: {}, arm: null, side: 'left', sideAuto: true,
-  xray: false, film: false, layer: 0,
+  xray: false, film: false, layer: 0, labels: true,
   camOn: false, camError: '', source: null, testSource: null,
   tracker: null, trackerState: 'off', flow: createFlowTracker(), skin: null,
   locked: false, lastHand: 0, lastGood: 0, fade: 0,
@@ -170,7 +170,9 @@ function onFlow(m, src) {
 
 /** Outline of the user's arm, from the posed model joints, as shapes for the opening mask. */
 function armShapes() {
-  const W = stage.clientWidth, H = stage.clientHeight, J = posedJoints(state.arm, view.seg), s = state.scale || 1;
+  const W = stage.clientWidth, H = stage.clientHeight, s = state.scale || 1;
+  // The opening follows the user's real hand (tracked points); the forearm comes from the model.
+  const J = state.P || posedJoints(state.arm, view.seg);
   const css = (v) => [W / 2 + v.x, H / 2 - v.y];
   const caps = [], polys = [];
   const fw = { 2: 20, 3: 18, 4: 16 };
@@ -181,7 +183,7 @@ function armShapes() {
   polys.push([0, 1, 2, 5, 9, 13, 17].map((i) => css(J[i])));
   caps.push([...css(J[0]), ...css(J[9]), 45 * s]);
   // forearm: from the wrist toward the elbow, as wide as measured (or a typical forearm)
-  const wr = J[0], el = state.arm.elbow.clone().applyMatrix4(view.seg[0]);
+  const wr = J[0].clone(), el = state.arm.elbow.clone().applyMatrix4(view.seg[0]);
   const dir = el.clone().sub(wr); dir.z = 0; const len = dir.length(); dir.normalize();
   const perp = new THREE.Vector3(-dir.y, dir.x, 0);
   const w0 = (state.forearmWidth || 58 * s) * 0.5 * 0.9, w1 = w0 * 1.25;
@@ -222,7 +224,7 @@ const labelEls = [];
 function updateLabels(box, show, inMask) {
   const host = $('labels'), W = stage.clientWidth, H = stage.clientHeight;
   const cands = [];
-  if (show && state.arm) {
+  if (show && state.arm && state.labels) {
     for (const p of state.arm.parts) {
       if (!view.visible[p.kind] || PRIORITY[p.kind] === undefined) continue;
       if (state.film && p.kind !== 'bone') continue;
@@ -351,11 +353,13 @@ function syncButtons() {
   $('layerBtn').textContent = LAYERS[state.layer].label;
   $('sideBtn').textContent = `${state.side === 'left' ? 'Left' : 'Right'} arm${state.sideAuto ? '' : ' ✓'}`;
   $('box').style.display = state.mode === 'cam' && state.xray ? 'block' : 'none';
+  $('labelBtn').classList.toggle('on', state.labels);
   for (const b of $('chips').children) b.classList.toggle('on', !!chips3d[b.dataset.kind]);
 }
 for (const b of document.querySelectorAll('#modes button')) b.onclick = () => setMode(b.dataset.mode);
 $('xrayBtn').onclick = () => { state.xray = !state.xray; if (!state.xray) { state.locked = false; state.flow.reset(); } syncButtons(); };
 $('styleBtn').onclick = () => { state.film = !state.film; syncButtons(); };
+$('labelBtn').onclick = () => { state.labels = !state.labels; syncButtons(); };
 $('layerBtn').onclick = () => { state.layer = (state.layer + 1) % LAYERS.length; applyLayers(); syncButtons(); };
 $('sideBtn').onclick = () => { state.sideAuto = false; useSide(state.side === 'left' ? 'right' : 'left'); };
 for (const [kind, label] of [['bone', 'Bones'], ['muscle', 'Muscles'], ['artery', 'Arteries'], ['vein', 'Veins']]) {
