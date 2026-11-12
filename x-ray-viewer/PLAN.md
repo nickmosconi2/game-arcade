@@ -18,32 +18,30 @@ a DICOM file (CT, MRI or X-ray); the camera only tells the app where your arm is
 
 ## Phase 0: browser MVP (built, in `web/`)
 
-Opens straight into the camera with a real CT of a left forearm and hand already loaded
-(Visible Human Female, U.S. National Library of Medicine, public domain). Tap **X-RAY** and a
-framed window appears in the viewfinder; inside it you see the bones and muscle of the part of
-the arm behind it. Move the phone (or the arm) to look at a different part or from a different
-angle.
+Opens to the normal camera. Tap **X-RAY**: a window appears, and wherever your arm passes behind
+it the skin is "cut open" to show what is inside: bones, muscles and tendons, arteries and veins,
+each named. Everything is posed from your own tracked hand, bone by bone, so the finger bones bend
+and spread with your fingers.
 
 | Piece | State |
 | --- | --- |
-| Real arm CT: cut out of the full-body Visible Human scan, separated from the hip and torso, 1 mm, shipped as a DICOM series | Done |
-| Readable view: CT numbers turned into shaded ivory bone and red muscle, with bone names (radius, ulna, carpals, metacarpals, phalanges, thumb, elbow, humerus) and the region under the window | Done |
-| "X-ray film" view as an alternative | Done |
-| True 3D: the window ray-marches the CT volume, so turning the arm or phone shows a different angle | Done |
-| Lock-on from the hand (position, 3D turn, real size), corrected along the visible forearm | Tested on photos |
-| Stays locked when the phone is close and the hand is out of view (optical flow on the skin) | Tested on simulated close-ups |
-| Left / right arm switch (mirrors the scan) | Done |
-| 3D view with orbit and labels; slice view | Done |
+| Anatomy: BodyParts3D 4.0 (DBCLS, CC BY 4.0), left and right arm, 149 structures each: 30 bones, muscles with tendons, arteries, veins | Done |
+| Rig: 21 hand joints computed on the model's skeleton; every vertex bound to forearm, palm or one of 15 finger bones | Done |
+| Posing: palm fitted to the user's wrist and knuckles (rotation + size), each finger bone aimed along the user's finger, forearm swung to the arm seen in the picture | Tested on photos |
+| Opening clipped to the arm's own outline, with a cut skin/fat rim, dark cavity and inner shadow; muscle thins toward the middle so vessels and bone show | Done |
+| Layers (all / vessels + bone / bone), anatomy or X-ray-film look, labels and a caption for the bone in the middle | Done |
+| Stays locked when the phone is close and the hand is out of view (optical flow) | Tested on simulated close-ups |
+| Left/right arm picked from hand detection, with a manual switch | Done |
+| 3D model view with layer toggles | Done |
+| CT/DICOM viewing (real Visible Human arm CT, slices, volume rendering) | Built earlier; parked, to be merged back in |
 
 Known gaps:
 
-1. Not yet tried on a live iPhone camera; tracking smoothness and speed need tuning there.
-2. Close-up tracking (no hand in view) follows sliding, turning and zooming, but not twisting
-   the forearm; show the hand again to re-anchor.
-3. The scan keeps the pose the arm had in the scanner; it does not bend with your wrist or fingers.
-4. The Visible Human scan's field of view clips one side of the elbow, and the 1990s scanner
-   left horizontal streaks.
-5. Compressed DICOM (JPEG-LS, JPEG 2000, RLE) still not decoded.
+1. Not yet tuned on a live iPhone camera.
+2. The forearm follows the hand's turn but not a separate forearm twist when the hand is out of view.
+3. Muscles move with the nearest bone; they do not bulge or slide like real muscle.
+4. Peripheral nerves are not in BodyParts3D; adding them needs another source (for example Z-Anatomy).
+5. It is a reference body, not the user's anatomy.
 
 ## Phase 1: make the browser version solid (about 1 to 2 weeks)
 
