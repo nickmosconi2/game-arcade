@@ -29,6 +29,9 @@ brain and spinal cord. A caption names the region and the main structure in the 
 | Rig: 44 segments (torso, head, both arms and legs, hands, 15 finger bones per hand); every vertex bound to one or two segments | Done |
 | Body posing from MediaPipe pose tracking (torso, head, limbs) plus hand tracking for exact finger bones; trackers alternate frames | Tested on photos |
 | Opening clipped to the body outline (pose segmentation) and the hands, with a cut skin/fat rim, dark cavity and inner shadow | Done |
+| X-ray look: bones drawn like a radiograph (bright edges, overlaps glow), the live picture turned into a soft-tissue shadow, scan beam and grain; Bone only by default; colored Anatomy look as an option | Done |
+| Limbs without a face in view (a leg from above): MoveNet Thunder (TensorFlow.js, 12.5 MB, loaded only when needed) finds knees, ankles, elbows, hips | Tested on photos; borderline confidence |
+| Selfie camera with a mirrored view | Done |
 | Hand-only mode when only a hand is in view (arm and hand posed from the hand) | Tested on photos |
 | Labels in plain words for organs ("Heart", "Kidney"), region caption, labels on/off | Done |
 | Layers (all / organs + vessels / bone), anatomy or X-ray-film look | Done |
@@ -38,11 +41,13 @@ brain and spinal cord. A caption names the region and the main structure in the 
 
 Known gaps:
 
+0. Possible next step: remember the person's proportions automatically from one clear full-body view and reuse them for close-ups.
 1. Not yet tuned on a live iPhone camera; pose plus hand tracking may be slow on older phones.
 2. Body shape is fitted by size and joint positions only: a reference body, not the user's anatomy.
 3. Muscles and organs move with the nearest bone; they do not bulge, slide or breathe.
 4. Peripheral nerves, skin and reproductive organs are not included.
-5. Spine bending is approximated by the torso fit (no separate chest/pelvis twist yet).
+5. Close-ups with no joint in view (a foot in a sock filling the screen) are not recognised; the window shows the scan of the picture only.
+6. Spine bending is approximated by the torso fit (no separate chest/pelvis twist yet).
 
 ## Phase 1: make the browser version solid (about 1 to 2 weeks)
 

@@ -159,3 +159,44 @@ export function solveBody(model, P, vis, seg, handsTracked = {}) {
 
 /** Hide everything (used before a hand-only solve). */
 export function hideAll(seg) { for (const m of seg) m.copy(HIDDEN); }
+
+/**
+ * Limbs only (no shoulders in view, e.g. a leg seen from above): each limb bone is laid from one
+ * joint to the next in the picture plane, sized from its own length. P: 33 points, z ignored.
+ */
+export function solveLimbs(model, P, vis, seg, handsTracked = {}) {
+  const J = model.pose, ok = (i) => P[i] && (vis[i] ?? 0) > 0.3;
+  for (let s = 0; s < SEG_COUNT; s++) {
+    const isHand = (s === SEG.hand[0] || (s >= SEG.fingers[0] && s < SEG.fingers[0] + 15)) ? 'left'
+      : (s === SEG.hand[1] || (s >= SEG.fingers[1] && s < SEG.fingers[1] + 15)) ? 'right' : null;
+    if (!isHand || !handsTracked[isHand]) seg[s].copy(HIDDEN);
+  }
+  const I = new THREE.Matrix4(), toward = new THREE.Vector3(0, 0, 1);
+  const flat = (i) => new THREE.Vector3(P[i].x, P[i].y, 0);
+  let n = 0, sum = 0;
+  const lay = (s, a, b) => {
+    if (!ok(a) || !ok(b)) return null;
+    const A = flat(a), B = flat(b), k = A.distanceTo(B) / Math.max(J[a].distanceTo(J[b]), 1);
+    if (k < 0.05) return null;
+    const M = laySegment(J[a], J[b], A, B, I, toward, k, 1, 1);
+    if (M) { seg[s].copy(M); n++; sum += k; }
+    return M ? k : null;
+  };
+  for (const i of [0, 1]) {
+    lay(SEG.upperArm[i], 11 + i, 13 + i);
+    const kf = lay(SEG.forearm[i], 13 + i, 15 + i);
+    lay(SEG.thigh[i], 23 + i, 25 + i);
+    const ks = lay(SEG.shin[i], 25 + i, 27 + i);
+    // No toe point: the foot stays at its rest angle to the shin (pointing toward the camera).
+    if (ks && ok(27 + i)) seg[SEG.foot[i]].copy(seg[SEG.shin[i]]);
+    const side = i === 0 ? 'left' : 'right';
+    if (kf && !handsTracked[side] && ok(15 + i)) {
+      // hand continues the forearm
+      const A = flat(15 + i), d = A.clone().sub(flat(13 + i)).normalize(), R = model.hands[side];
+      const mid = R[5].clone().add(R[17]).multiplyScalar(0.5), len = R[0].distanceTo(mid) * kf;
+      const M = laySegment(R[0], mid, A, A.clone().addScaledVector(d, len), I, toward, kf, 1, 1);
+      if (M) { seg[SEG.hand[i]].copy(M); for (let f = 0; f < 15; f++) seg[SEG.fingers[i] + f].copy(M); }
+    }
+  }
+  return n ? { scale: sum / n } : null;
+}

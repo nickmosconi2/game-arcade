@@ -21,6 +21,9 @@ export const KIND_STYLE = {
   muscle:       { color: [0.74, 0.20, 0.17], alpha: 0.88, order: 5, peel: 0.18 },
   tissue:       { color: [0.90, 0.85, 0.80], alpha: 0.5, order: 4, peel: 0.3 },
 };
+/** How bright each tissue shows in the X-ray scan look (bone densest; vessels as if dye-filled). */
+const SCAN_DENSITY = { bone: 1.0, artery: 0.55, vein: 0.38, nerve: 0.3, muscle: 0.07, tissue: 0.05 };
+const scanDensity = (k) => SCAN_DENSITY[k] ?? (k === 'organ_lung' ? 0.06 : k === 'organ_heart' ? 0.22 : 0.16);
 /** Display group for each tissue kind (layers, labels). */
 export const GROUP = (k) => (k.startsWith('organ') ? 'organ' : k);
 
@@ -78,7 +81,9 @@ uniform mat4 uSeg[${SEG_COUNT}];
 in vec4 skin;
 out vec3 vN;
 out vec3 vP;
+out vec3 vR;
 void main() {
+  vR = position;
   int a = int(skin.x + 0.5), b = int(skin.y + 0.5);
   float w = skin.z / 255.0;
   mat4 M = uSeg[a] * (1.0 - w) + uSeg[b] * w;
@@ -91,18 +96,35 @@ void main() {
 const FRAG = `
 precision highp float;
 uniform vec3 uColor;
-uniform float uAlpha, uPeel, uXray, uUseMask, uFade;
+uniform float uAlpha, uPeel, uXray, uUseMask, uFade, uDensity, uReveal, uSweep, uSweepAmp, uTime;
 uniform sampler2D uMask;
 uniform vec2 uRes;
 uniform vec4 uBox;
 in vec3 vN;
 in vec3 vP;
+in vec3 vR;
 out vec4 outColor;
+float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float n3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
 void main() {
   float m = uUseMask > 0.5 ? texture(uMask, gl_FragCoord.xy / uRes).r : 1.0;
   if (m < 0.02) discard;
   vec3 n = normalize(vN);
   if (!gl_FrontFacing) n = -n;
+  if (uXray > 0.5) {
+    // Radiograph: every surface adds light (additive blending), so where X-rays would cross more bone
+    // it is brighter: bright cortical edges, darker marrow, overlaps glow. Grainy bone texture.
+    if (uUseMask > 0.5 && vP.y < uReveal) discard;
+    float edge = pow(1.0 - abs(n.z), 1.7);
+    float grain = 0.78 + 0.44 * n3(vR * 0.16) + 0.12 * n3(vR * 0.6);
+    float v = uDensity * (0.045 + 0.40 * edge) * grain;
+    v += uDensity * uSweepAmp * 0.55 * exp(-pow((vP.y - uSweep) / 7.0, 2.0));
+    vec3 c = vec3(0.80, 0.92, 1.0) * v;
+    outColor = vec4(c * smoothstep(0.02, 0.3, m) * uFade, 1.0);
+    return;
+  }
   vec3 L = normalize(vec3(-0.35, 0.55, 0.76));
   float dif = max(dot(n, L), 0.0), rim = pow(1.0 - abs(n.z), 2.0);
   float spec = pow(max(dot(n, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 36.0);
@@ -114,10 +136,6 @@ void main() {
     float r = length((vP.xy - bc) / hs);
     a *= mix(uPeel, 1.0, smoothstep(0.25, 0.95, r));
     a = max(a, rim * 0.55 * uAlpha);
-  }
-  if (uXray > 0.5) {
-    c = vec3(0.78, 0.9, 1.0) * (0.22 + 1.0 * rim);
-    a = (0.22 + 0.78 * rim) * uAlpha;
   }
   // Depth cue: the cut edge of the opening casts a soft shadow inward.
   c *= mix(0.3, 1.0, smoothstep(0.12, 0.8, m));
@@ -131,27 +149,55 @@ out vec2 vS;
 void main() { vec2 p = mix(uBox.xy, uBox.zw, position.xy * 0.5 + 0.5); vS = p; gl_Position = projectionMatrix * vec4(p, 0.0, 1.0); }`;
 const CAV_FRAG = `
 precision highp float;
-uniform sampler2D uMask;
-uniform vec2 uRes;
-uniform float uFade, uXray, uTime;
-uniform vec4 uBox;
+uniform sampler2D uMask, uCam;
+uniform vec2 uRes, uStage;
+uniform float uFade, uXray, uTime, uOn, uHasCam, uSweep, uSweepAmp;
+uniform vec4 uBox, uCamRect;
 in vec2 vS;
+float luma(vec2 uv) { return dot(texture(uCam, uv).rgb, vec3(0.299, 0.587, 0.114)); }
 out vec4 outColor;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
+vec4 scan() {
+  // The live picture becomes a radiograph: air dark, the body a glowing soft-tissue shadow, the cut
+  // edge of the skin a thin bright line. Before anything is found the whole window shows a negative.
+  float m = uFade > 0.001 ? texture(uMask, gl_FragCoord.xy / uRes).r : 0.0;
+  vec2 css = vec2(vS.x + uStage.x * 0.5, uStage.y * 0.5 - vS.y);
+  vec2 uv = (css - uCamRect.xy) / uCamRect.zw, px = 3.0 / uCamRect.zw;
+  float L = 0.5, detail = 0.0;
+  if (uHasCam > 0.5) {
+    L = luma(uv);
+    float blur = (luma(uv + vec2(px.x, 0.0)) + luma(uv - vec2(px.x, 0.0)) + luma(uv + vec2(0.0, px.y)) + luma(uv - vec2(0.0, px.y))) * 0.25;
+    detail = L - blur;
+  }
+  float inv = 1.0 - L;
+  float negative = 0.05 + 0.24 * pow(inv, 1.4) + abs(detail) * 1.6;
+  float thick = smoothstep(0.0, 1.0, m);
+  float body = 0.16 + 0.17 * thick + 0.10 * inv + abs(detail) * 0.9;
+  float air = 0.025 + 0.06 * pow(inv, 1.5) + abs(detail) * 0.5;
+  float skinLine = (smoothstep(0.03, 0.22, m) - smoothstep(0.25, 0.6, m)) * 0.22;
+  float v = mix(negative, mix(air, body, smoothstep(0.02, 0.35, m)) + skinLine, uFade);
+  v *= 0.93 + 0.07 * sin(css.y * 2.1);                                         // scan lines
+  v += (fract(sin(dot(gl_FragCoord.xy + fract(uTime * 7.3) * 113.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.045; // grain
+  vec2 hs = (uBox.zw - uBox.xy) * 0.5, q = abs(vS - (uBox.xy + uBox.zw) * 0.5) / hs;
+  v *= 1.0 - 0.45 * smoothstep(0.62, 1.0, max(q.x, q.y));                      // vignette
+  vec3 c = vec3(0.60, 0.80, 1.0) * v + vec3(0.04, 0.06, 0.09);
+  // sweeping scan beam with a short afterglow
+  float dy = vS.y - uSweep;
+  c += vec3(0.45, 0.85, 1.0) * uSweepAmp * (exp(-dy * dy / 5.0) * 0.8 + (dy > 0.0 ? exp(-dy / 26.0) * 0.12 : 0.0));
+  float edgeA = smoothstep(1.0, 0.985, max(q.x, q.y));
+  return vec4(c, 0.96 * uOn * edgeA);
+}
 void main() {
+  if (uXray > 0.5) { outColor = scan(); return; }
   float m = texture(uMask, gl_FragCoord.xy / uRes).r;
   if (m < 0.02) discard;
   float rimBand = 1.0 - smoothstep(0.18, 0.55, m);
-  vec3 deep = uXray > 0.5 ? vec3(0.02, 0.04, 0.08) : mix(vec3(0.10, 0.015, 0.02), vec3(0.22, 0.04, 0.04), noise(vS * 0.05) * 0.7 + noise(vS * 0.2) * 0.3);
+  vec3 deep = mix(vec3(0.10, 0.015, 0.02), vec3(0.22, 0.04, 0.04), noise(vS * 0.05) * 0.7 + noise(vS * 0.2) * 0.3);
   vec3 fat = vec3(0.96, 0.82, 0.55), skin = vec3(0.90, 0.62, 0.55);
   vec3 rimCol = mix(skin, fat, smoothstep(0.05, 0.3, m));
-  vec3 c = mix(deep, rimCol, rimBand * (uXray > 0.5 ? 0.25 : 0.85));
-  // a faint scan line sweeping through the opening
-  float span = uBox.w - uBox.y;
-  float line = exp(-pow((vS.y - (uBox.y + fract(uTime * 0.3) * span)) / 2.5, 2.0)) * 0.3;
-  c += vec3(0.45, 0.85, 1.0) * line;
+  vec3 c = mix(deep, rimCol, rimBand * 0.85);
   outColor = vec4(c, smoothstep(0.02, 0.22, m) * uFade);
 }`;
 
@@ -167,6 +213,8 @@ export class ArmView {
     this.shared = {
       uSeg: { value: this.seg }, uMask: { value: this.maskTex }, uRes: { value: new THREE.Vector2(1, 1) },
       uBox: { value: new THREE.Vector4() }, uUseMask: { value: 1 }, uXray: { value: 0 }, uFade: { value: 1 }, uTime: { value: 0 },
+      uCam: { value: null }, uCamRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uStage: { value: new THREE.Vector2(1, 1) }, uHasCam: { value: 0 },
+      uOn: { value: 1 }, uSweep: { value: -1e5 }, uSweepAmp: { value: 0 }, uReveal: { value: -1e5 },
     };
     this.cavity = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3, uniforms: this.shared, vertexShader: CAV_VERT, fragmentShader: CAV_FRAG,
@@ -187,23 +235,42 @@ export class ArmView {
       const opaque = st.alpha >= 1;
       const mat = new THREE.ShaderMaterial({
         glslVersion: THREE.GLSL3, vertexShader: VERT, fragmentShader: FRAG,
-        uniforms: { ...this.shared, uColor: { value: new THREE.Color(...st.color) }, uAlpha: { value: st.alpha }, uPeel: { value: st.peel } },
+        uniforms: { ...this.shared, uColor: { value: new THREE.Color(...st.color) }, uAlpha: { value: st.alpha }, uPeel: { value: st.peel }, uDensity: { value: scanDensity(kind) } },
         transparent: true, depthWrite: opaque, depthTest: true, side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(g, mat);
-      mesh.frustumCulled = false; mesh.renderOrder = st.order;
+      mesh.frustumCulled = false; mesh.renderOrder = st.order; mesh.userData.kind = kind;
       this.scene.add(mesh); this.meshes[kind] = mesh;
     }
   }
   /** Draw the arm. box: screen px {x0,y0,x1,y1} (centre origin, y up). opts: {mask, xray, fade, time, cavity} */
-  render(W, H, box, { mask = true, xray = false, fade = 1, time = 0, cavity = true } = {}) {
+  /** The live camera picture (video or canvas), sampled by the X-ray scan look. */
+  setSource(el) {
+    if (this.srcEl === el) return;
+    if (this.camTex) this.camTex.dispose();
+    this.srcEl = el;
+    this.camTex = el ? (el instanceof HTMLVideoElement ? new THREE.VideoTexture(el) : new THREE.CanvasTexture(el)) : null;
+    if (this.camTex) { this.camTex.flipY = false; this.camTex.minFilter = this.camTex.magFilter = THREE.LinearFilter; this.camTex.generateMipmaps = false; }
+    this.shared.uCam.value = this.camTex; this.shared.uHasCam.value = el ? 1 : 0;
+  }
+  render(W, H, box, { mask = true, xray = false, fade = 1, time = 0, cavity = true, on = 1, cam = null, sweep = -1e5, sweepAmp = 0, reveal = -1e5 } = {}) {
     const r = this.renderer, s = this.shared;
+    s.uOn.value = on; s.uSweep.value = sweep; s.uSweepAmp.value = sweepAmp; s.uReveal.value = reveal; s.uStage.value.set(W, H);
+    if (cam) s.uCamRect.value.set(cam.ox, cam.oy, cam.dw, cam.dh);
+    if (this.camTex && !(this.srcEl instanceof HTMLVideoElement)) this.camTex.needsUpdate = true;
+    for (const m of Object.values(this.meshes)) {
+      const add = xray, mat = m.material;
+      if ((mat.blending === THREE.AdditiveBlending) !== add) {
+        mat.blending = add ? THREE.AdditiveBlending : THREE.NormalBlending;
+        mat.depthTest = !add; mat.depthWrite = !add && KIND_STYLE[m.userData.kind].alpha >= 1; mat.needsUpdate = true;
+      }
+    }
     const buf = r.getDrawingBufferSize(new THREE.Vector2());
     s.uRes.value.copy(buf);
     s.uBox.value.set(box.x0, box.y0, box.x1, box.y1);
     s.uUseMask.value = mask ? 1 : 0; s.uXray.value = xray ? 1 : 0; s.uFade.value = fade; s.uTime.value = time;
     this.cavity.visible = cavity && mask;
-    for (const [kind, m] of Object.entries(this.meshes)) m.visible = !!this.visible[GROUP(kind)] && (!xray || kind === 'bone');
+    for (const [kind, m] of Object.entries(this.meshes)) m.visible = !!this.visible[GROUP(kind)] && fade > 0.002;
     this.camera.left = -W / 2; this.camera.right = W / 2; this.camera.top = H / 2; this.camera.bottom = -H / 2;
     this.camera.updateProjectionMatrix();
     // Only the window needs drawing in the camera view: saves a lot of work on a phone.

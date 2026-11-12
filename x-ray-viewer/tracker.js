@@ -62,3 +62,38 @@ export async function createPoseTracker() {
     },
   };
 }
+
+// ---------- MoveNet (TensorFlow.js): finds knees, ankles, elbows and hips without a face in view ----------
+// MediaPipe's body tracker starts from the face, so a leg on its own is never found. MoveNet looks for
+// each joint directly; it is loaded only when needed (about 13 MB).
+const TFJS = new URL('./vendor/tfjs', import.meta.url).href, MOVENET = new URL('./vendor/movenet/model.json', import.meta.url).href;
+const loadScript = (src) => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error(`could not load ${src}`)); document.head.append(s); });
+// MoveNet's 17 joints, in the 33-point MediaPipe numbering the rig uses.
+const MOVE_TO_MP = [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+
+export async function createMoveNet() {
+  if (!window.tf) { await loadScript(`${TFJS}/tf-core.min.js`); await loadScript(`${TFJS}/tf-backend-webgl.min.js`); await loadScript(`${TFJS}/tf-converter.min.js`); }
+  const tf = window.tf;
+  try { await tf.setBackend('webgl'); } catch { await tf.setBackend('cpu'); }
+  await tf.ready();
+  const model = await tf.loadGraphModel(MOVENET);
+  const S = 256, pad = document.createElement('canvas'); pad.width = pad.height = S;
+  const px = pad.getContext('2d', { willReadFrequently: true });
+  return {
+    /** Returns {image: 33 points {x, y} (0..1 of the source), vis: 33 scores} or null. */
+    async detect(source) {
+      const sw = source.videoWidth || source.width, sh = source.videoHeight || source.height, k = S / Math.max(sw, sh);
+      const dw = sw * k, dh = sh * k, ox = (S - dw) / 2, oy = (S - dh) / 2;
+      px.fillStyle = '#6e6e6e'; px.fillRect(0, 0, S, S); px.drawImage(source, ox, oy, dw, dh);
+      const out = tf.tidy(() => model.execute(tf.expandDims(tf.browser.fromPixels(pad), 0)));
+      const a = await out.data(); out.dispose();
+      const image = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5 })), vis = new Array(33).fill(0);
+      let any = false;
+      MOVE_TO_MP.forEach((m, i) => {
+        const y = a[i * 3], x = a[i * 3 + 1], s = a[i * 3 + 2];
+        image[m] = { x: (x * S - ox) / dw, y: (y * S - oy) / dh }; vis[m] = s; if (s > 0.3) any = true;
+      });
+      return any ? { image, vis } : null;
+    },
+  };
+}

@@ -2,7 +2,7 @@
 // a window: bones, organs, muscles, vessels and nerves of a reference body, posed to match yours.
 import * as THREE from './vendor/three.module.min.js';
 import { loadBody, ArmView, GROUP } from './anatomy.js';
-import { SEG, screenPoints, HAND_PAIRS, POSE_PAIRS, solveHand, solveBody, hideAll, FINGER_SEGS } from './rig.js';
+import { SEG, screenPoints, HAND_PAIRS, POSE_PAIRS, solveHand, solveBody, solveLimbs, hideAll, FINGER_SEGS } from './rig.js';
 import { createFlowTracker } from './flow.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,18 +11,38 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const now = () => performance.now();
 
 const LAYERS = [
-  { label: 'All layers', show: { bone: true, organ: true, artery: true, vein: true, nerve: true, muscle: true } },
-  { label: 'Organs + vessels', show: { bone: true, organ: true, artery: true, vein: true, nerve: true, muscle: false } },
-  { label: 'Bone only', show: { bone: true, organ: false, artery: false, vein: false, nerve: false, muscle: false } },
+  { label: 'Bone only', hud: 'BONE', show: { bone: true, organ: false, artery: false, vein: false, nerve: false, muscle: false } },
+  { label: 'Organs + vessels', hud: 'ORGANS · VESSELS', show: { bone: true, organ: true, artery: true, vein: true, nerve: true, muscle: false } },
+  { label: 'All layers', hud: 'ALL TISSUE', show: { bone: true, organ: true, artery: true, vein: true, nerve: true, muscle: true } },
 ];
+
+/** One-euro filter over a list of points: steady when still, quick when moving (less jitter). */
+class Smoother {
+  constructor(minCut = 1.4, beta = 0.012) { this.minCut = minCut; this.beta = beta; this.x = null; this.dx = null; this.t = 0; }
+  reset() { this.x = null; }
+  filter(P, t) {
+    if (!this.x || this.x.length !== P.length || t - this.t > 0.5) { this.x = P.map((p) => p.clone()); this.dx = P.map(() => new THREE.Vector3()); this.t = t; return this.x.map((p) => p.clone()); }
+    const dt = Math.max(1 / 120, t - this.t); this.t = t;
+    const a = (cut) => 1 / (1 + 1 / (2 * Math.PI * cut * dt));
+    const ad = a(1.0);
+    for (let i = 0; i < P.length; i++) {
+      const d = P[i].clone().sub(this.x[i]).divideScalar(dt);
+      this.dx[i].lerp(d, ad);
+      this.x[i].lerp(P[i], a(this.minCut + this.beta * this.dx[i].length()));
+    }
+    return this.x.map((p) => p.clone());
+  }
+}
 const chips3d = { bone: true, muscle: true, organ: true, artery: true, vein: true, nerve: true };
 
 const state = {
   mode: 'cam', model: null,
-  xray: false, film: false, layer: 0, labels: true,
+  xray: false, film: true, layer: 0, labels: true, facing: 'environment', mirror: false,
+  move: null, moveState: 'off', limbP: null, limbVis: null, poseFrom: '', sweepT0: 0, wasLive: false,
+  smooth: { pose: new Smoother(), move: new Smoother(1.0, 0.01), left: new Smoother(), right: new Smoother() }, caption: { text: '', cand: '', since: 0 },
   camOn: false, camError: '', source: null, testSource: null,
   hands: null, pose: null, trackerState: 'off', flow: createFlowTracker(), skin: null,
-  locked: false, lastPose: 0, lastHand: { left: 0, right: 0 }, lastGood: 0, fade: 0, frame: 0,
+  on: 0, xrayAt: 0, lastMP: 0, locked: false, lastPose: 0, lastHand: { left: 0, right: 0 }, lastGood: 0, fade: 0, frame: 0,
   poseP: null, handP: { left: null, right: null }, delta: { left: 0, right: 0 },
   forearm: null, forearmWidth: null, outline: null, scale: 1,
   orbit: new THREE.Quaternion().setFromEuler(new THREE.Euler(0.1, -0.35, 0)), zoom3d: 1, pan3d: new THREE.Vector2(),
@@ -113,8 +133,8 @@ function readSkinAndForearm(hand, img, w, h, pxScreen) {
 function onPose(res, src, W, H) {
   const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height);
   const P = screenPoints(res.image, res.world, map.toScreen, POSE_PAIRS);
-  state.poseP = state.poseP && now() - state.lastPose < 500 ? state.poseP.map((p, i) => p.lerp(P[i], 0.6)) : P;
-  state.vis = res.vis;
+  state.poseP = state.smooth.pose.filter(P, now() / 1000);
+  state.vis = res.vis; state.poseFrom = 'mp'; state.lastMP = now();
   const tracked = { left: now() - state.lastHand.left < 300, right: now() - state.lastHand.right < 300 };
   const r = solveBody(state.model, state.poseP, res.vis, view.seg, tracked);
   if (!r) return false;
@@ -135,18 +155,47 @@ function onHand(hand, src, W, H, img, iw, ih) {
   const side = hand.label === 'Right' ? 'right' : 'left';
   const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height, map = coverMap(W, H, sw, sh);
   const P = screenPoints(hand.image, hand.world, map.toScreen, HAND_PAIRS);
-  state.handP[side] = state.handP[side] && now() - state.lastHand[side] < 500 ? state.handP[side].map((p, i) => p.lerp(P[i], 0.55)) : P;
+  state.handP[side] = state.smooth[side].filter(P, now() / 1000);
   const seen = img ? readSkinAndForearm(hand, img, iw, ih, map.k * sw / iw) : {};
   if (seen.skin) state.skin = seen.skin;
   if (seen.forearm) state.forearm = state.forearm ? state.forearm.lerp(seen.forearm, 0.3).normalize() : seen.forearm;
   if (seen.width) state.forearmWidth = state.forearmWidth ? state.forearmWidth + (seen.width - state.forearmWidth) * 0.2 : seen.width;
-  const poseFresh = now() - state.lastPose < 400;
+  const poseFresh = now() - state.lastPose < 600;
   if (!poseFresh && !state.handOnly) { hideAll(view.seg); }
   state.handOnly = !poseFresh;
   const r = solveHand(state.model, side, state.handP[side], view.seg, { withForearm: !poseFresh, forearmDir: seen.forearm || null, prevDelta: state.delta[side] });
   state.delta[side] = r.delta; if (!poseFresh) state.scale = r.scale;
   state.lastHand[side] = state.lastGood = now(); state.locked = true;
 }
+/** MoveNet joints (no face needed): knees, ankles, elbows, hips. */
+function onMove(res, src, W, H) {
+  const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height);
+  const vis = res.vis.slice(), P = res.image.map((p) => { const q = map.toScreen(p.x, p.y); return new THREE.Vector3(q[0], q[1], 0); });
+  // MoveNet sometimes puts the left and right joint on the same spot: keep the surer one.
+  const near = 0.05 * Math.min(W, H);
+  for (const [a, b] of [[11, 12], [13, 14], [15, 16], [23, 24], [25, 26], [27, 28]]) {
+    if (vis[a] > 0.3 && vis[b] > 0.3 && P[a].distanceTo(P[b]) < near) { if (vis[a] >= vis[b]) vis[b] = 0; else vis[a] = 0; }
+  }
+  const ok = (i) => vis[i] > 0.3;
+  // A limb on its own needs two joints of the same limb found with some confidence (a knee and an
+  // ankle, say); a wrong guess is worse than "still scanning".
+  // It must also be found twice in a row before the first lock.
+  const sure = (i) => vis[i] > 0.38;
+  const chain = [[11, 13], [13, 15], [12, 14], [14, 16], [23, 25], [25, 27], [24, 26], [26, 28]].some(([a, c]) => sure(a) && sure(c));
+  const joints = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].filter(ok).length;
+  state.moveHits = chain && joints >= 2 ? (state.moveHits || 0) + 1 : 0;
+  const holding = state.poseFrom === 'move' && now() - state.lastPose < 1000;
+  if (!state.moveHits || (state.moveHits < 2 && !holding)) return false;
+  const Ps = state.smooth.move.filter(P, now() / 1000);
+  const tracked = { left: now() - state.lastHand.left < 300, right: now() - state.lastHand.right < 300 };
+  const torso = (ok(11) || ok(12)) && (ok(23) || ok(24)) && [11, 12, 23, 24].filter(ok).length >= 3;
+  const r = torso ? solveBody(state.model, Ps, vis.map((v) => (v > 0.3 ? 1 : 0)), view.seg, tracked) : solveLimbs(state.model, Ps, vis, view.seg, tracked);
+  if (!r) return false;
+  state.scale = r.scale; state.limbP = Ps; state.limbVis = vis; state.poseFrom = 'move'; state.outline = null;
+  state.lastPose = state.lastGood = now(); state.locked = true;
+  return true;
+}
+
 /** Nothing detected (phone close to the skin): move everything with the picture. */
 function onFlow(m, src, W, H) {
   const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height);
@@ -156,6 +205,7 @@ function onFlow(m, src, W, H) {
   for (const s of view.seg) s.premultiply(D);
   for (const k of ['left', 'right']) if (state.handP[k]) state.handP[k].forEach((p) => p.applyMatrix4(D));
   if (state.poseP) state.poseP.forEach((p) => p.applyMatrix4(D));
+  if (state.limbP) state.limbP.forEach((p) => p.applyMatrix4(D));
   state.scale *= m.scale;
   if (state.forearmWidth) state.forearmWidth *= m.scale;
   if (state.outline) {
@@ -186,6 +236,18 @@ function openingShapes(W, H) {
       polys.push([wr.clone().addScaledVector(perp, w0), far.clone().addScaledVector(perp, w1), far.clone().addScaledVector(perp, -w1), wr.clone().addScaledVector(perp, -w0)].map(css));
     }
   }
+  if (state.poseFrom === 'move' && state.limbP && now() - state.lastPose < 2500) {
+    // No body outline from MoveNet: open the skin along each limb, as wide as a limb of that length.
+    const P = state.limbP, ok = (i) => state.limbVis[i] > 0.3;
+    const limb = (a, b, wk) => { if (ok(a) && ok(b)) caps.push([...css(P[a]), ...css(P[b]), P[a].distanceTo(P[b]) * wk]); };
+    for (const i of [0, 1]) {
+      limb(11 + i, 13 + i, 0.4); limb(13 + i, 15 + i, 0.36); limb(23 + i, 25 + i, 0.46); limb(25 + i, 27 + i, 0.36);
+      if (ok(25 + i) && ok(27 + i)) { const A = P[27 + i], L = P[25 + i].distanceTo(A); caps.push([...css(A), ...css(A), L * 0.42]); }
+      if (ok(13 + i) && ok(15 + i)) { const A = P[15 + i], d = A.clone().sub(P[13 + i]); caps.push([...css(A), ...css(A.clone().addScaledVector(d, 0.45)), d.length() * 0.38]); }
+    }
+    const T = [11, 12, 24, 23].filter(ok);
+    if (T.length >= 3) polys.push(T.map((i) => css(P[i])));
+  }
   void s;
   return { caps, polys };
 }
@@ -201,19 +263,38 @@ async function ensureTrackers() {
   } catch (e) { console.error(e); state.trackerState = 'failed'; }
   trackersStarting = false;
 }
+async function ensureMoveNet() {
+  if (state.moveState !== 'off') return;
+  state.moveState = 'loading';
+  try { const t = await import('./tracker.js'); state.move = await t.createMoveNet(); state.moveState = 'ready'; }
+  catch (e) { console.error(e); state.moveState = 'failed'; }
+}
+let camBusy = false;
 async function startCamera() {
-  if (state.testSource) { state.source = state.testSource; state.camOn = true; state.camError = ''; return; }
-  if (state.camOn) return;
+  if (state.testSource) { state.source = state.testSource; state.camOn = true; state.camError = ''; view.setSource(state.testSource); applyMirror(); return; }
+  if (state.camOn || camBusy) return;
+  camBusy = true;
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error(window.isSecureContext ? 'no camera access in this browser' : 'the page must be opened over https');
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: state.facing }, width: { ideal: 1280 }, height: { ideal: 720 } } });
     video.srcObject = stream; await video.play();
+    const set = stream.getVideoTracks()[0]?.getSettings?.() || {};
+    state.mirror = (set.facingMode || state.facing) === 'user';
     state.source = video; state.camOn = true; state.camError = '';
+    view.setSource(video); applyMirror();
   } catch (e) {
     state.camError = e.name === 'NotAllowedError' ? 'Camera access was refused. Allow the camera for this site, then reload.' : `Camera unavailable: ${e.message}`;
   }
+  camBusy = false;
 }
-function stopCamera() { if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; } state.camOn = false; }
+/** Selfie camera: the picture and the anatomy drawn over it are shown mirrored, like a mirror. */
+function applyMirror() { stage.classList.toggle('mirror', state.mode === 'cam' && state.mirror); }
+function resetTracking() {
+  state.locked = false; state.flow.reset(); state.outline = null; state.poseP = null; state.limbP = null; state.handP = { left: null, right: null };
+  for (const k of Object.keys(state.smooth)) state.smooth[k].reset();
+  hideAll(view.seg);
+}
+function stopCamera() { if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; } state.camOn = false; view.setSource(null); }
 
 // ---------- naming what you are looking at ----------
 const PRIORITY = { organ: 4, bone: 3, artery: 2, nerve: 2, vein: 1, muscle: 0 };
@@ -255,7 +336,6 @@ function updateLabels(box, show, inMask) {
     for (const p of state.model.parts) {
       const g = GROUP(p.kind);
       if (!view.visible[g] || PRIORITY[g] === undefined || !isShown(view.seg[p.seg])) continue;
-      if (state.film && g !== 'bone') continue;
       const q = posedCenter(p);
       if (q.x < box.x0 + 14 || q.x > box.x1 - 14 || q.y < box.y0 + 14 || q.y > box.y1 - 14) continue;
       if (inMask && !inMask(q)) continue;
@@ -271,7 +351,7 @@ function updateLabels(box, show, inMask) {
   const placed = [];
   if (state.labels) for (const c of cands) {
     if (placed.length >= 6) break;
-    const sx = W / 2 + c.q.x, sy = H / 2 - c.q.y;
+    const sx = state.mirror && state.mode === 'cam' ? W / 2 - c.q.x : W / 2 + c.q.x, sy = H / 2 - c.q.y;
     if (placed.some((o) => Math.abs(o.sx - sx) < 150 && Math.abs(o.sy - sy) < 24)) continue;
     if (placed.some((o) => shortName(o.c.p.name) === shortName(c.p.name))) continue;
     placed.push({ sx, sy, c });
@@ -285,8 +365,11 @@ function updateLabels(box, show, inMask) {
     el.style.transform = pl.sx > W * 0.6 ? 'translate(calc(-100% + 8px),-50%)' : 'translate(-6px,-50%)';
   });
   if (state.mode === 'cam') {
-    const txt = best ? `${regionOf(best)} · ${shortName(best.name)}` : '';
-    if ($('regionText').textContent !== txt) $('regionText').textContent = txt;
+    // The caption only changes once a new answer has held for a moment (no flicker between two bones).
+    const txt = best ? `${regionOf(best)} · ${shortName(best.name)}` : '', C = state.caption;
+    if (txt !== C.cand) { C.cand = txt; C.since = now(); }
+    if (C.text !== txt && (now() - C.since > 450 || !C.text)) C.text = txt;
+    if ($('regionText').textContent !== C.text) $('regionText').textContent = C.text;
   }
 }
 
@@ -299,8 +382,8 @@ function hintText() {
   if (!state.xray) return '';
   if (state.trackerState === 'loading') return 'Getting ready…';
   if (state.trackerState === 'failed') return 'Tracking could not start on this device.';
-  if (!state.locked) return 'Point the camera at yourself or someone else';
-  if (now() - state.lastGood > 1500) return 'Lost the body. Step back a little';
+  if (!state.locked) return state.moveState === 'loading' ? 'Scanning… (loading limb finder)' : 'Scanning… get a hand, a face, or a knee or elbow in view';
+  if (now() - state.lastGood > 1500) return 'Lost it. Step back a little';
   return '';
 }
 async function tick() {
@@ -313,8 +396,17 @@ async function tick() {
         state.frame++;
         const sm = smallFrame(src);
         if (state.frame % 2 === 0) {
-          const res = await state.pose.detect(sm);
-          if (res) found = onPose(res, src, W, H) || found;
+          // Body: MediaPipe (needs a face; gives 3D and the outline). When it has found nothing for a
+          // while, every other turn goes to MoveNet, which finds knees, ankles and elbows on their own.
+          const mpFresh = now() - (state.lastMP || 0) < 1200;
+          if (!mpFresh && state.moveState === 'off' && now() - state.xrayAt > 1200) ensureMoveNet();
+          if (mpFresh || state.moveState !== 'ready' || state.frame % 4 === 0) {
+            const res = await state.pose.detect(sm);
+            if (res) found = onPose(res, src, W, H) || found;
+          } else {
+            const res = await state.move.detect(src);
+            if (res) found = onMove(res, src, W, H) || found;
+          }
         } else {
           const hands = await state.hands.detect(src);
           if (hands.length) {
@@ -328,27 +420,44 @@ async function tick() {
           const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height), b = windowBox();
           const p0 = map.toPic(b.x0, b.y1), p1 = map.toPic(b.x1, b.y0);
           const m = state.flow.update(src, { cx: (p0[0] + p1[0]) / 2, cy: (p0[1] + p1[1]) / 2, rx: Math.abs(p1[0] - p0[0]) / 2, ry: Math.abs(p1[1] - p0[1]) / 2 }, state.skin);
-          const stale = now() - Math.max(state.lastPose, state.lastHand.left, state.lastHand.right) > 250;
+          const stale = now() - Math.max(state.lastPose, state.lastHand.left, state.lastHand.right) > 350;
           if (m && stale && !found) { onFlow(m, src, W, H); state.lastGood = now(); }
         }
       }
       const live = state.locked && now() - state.lastGood < 2500;
-      state.fade += ((live && state.xray ? 1 : 0) - state.fade) * 0.2;
+      if (live && !state.wasLive) state.sweepT0 = t;          // new lock: sweep the scan over it
+      state.wasLive = live;
+      state.fade += ((live && state.xray ? 1 : 0) - state.fade) * 0.12;
+      state.on += ((state.xray ? 1 : 0) - state.on) * 0.2;
       renderer.clear();
       const box = windowBox();
-      if (state.fade > 0.01) {
+      if (state.on > 0.01) {
         const outline = state.outline && now() - state.lastGood < 2500 ? state.outline : null;
-        view.paintMask(W, H, box, openingShapes(W, H), outline);
-        const mc = view.maskCanvas, sc = mc.width / W, md = mc.getContext('2d').getImageData(0, 0, mc.width, mc.height).data;
-        const inMask = (q) => { const x = Math.round((W / 2 + q.x) * sc), y = Math.round((H / 2 - q.y) * sc); return x >= 0 && y >= 0 && x < mc.width && y < mc.height && md[(y * mc.width + x) * 4] > 140; };
-        view.render(W, H, box, { mask: true, xray: state.film, fade: state.fade, time: t });
-        updateLabels(box, true, inMask);
+        if (state.fade > 0.01) view.paintMask(W, H, box, openingShapes(W, H), outline);
+        let inMask = null;
+        if (state.fade > 0.01) {
+          const mc = view.maskCanvas, sc = mc.width / W, md = mc.getContext('2d').getImageData(0, 0, mc.width, mc.height).data;
+          inMask = (q) => { const x = Math.round((W / 2 + q.x) * sc), y = Math.round((H / 2 - q.y) * sc); return x >= 0 && y >= 0 && x < mc.width && y < mc.height && md[(y * mc.width + x) * 4] > 140; };
+        }
+        // Scan beam: one slow pass that reveals the bones when a body is found, then a faint pass
+        // every few seconds; a quick repeating pass while still searching.
+        const span = box.y1 - box.y0 + 30, el = t - state.sweepT0;
+        let sweep, amp, reveal = -1e5;
+        if (!live) { const ph = (t % 1.7) / 1.7; sweep = box.y1 + 10 - ph * span; amp = 0.7; }
+        else if (el < 1.1) { sweep = box.y1 + 10 - (el / 1.1) * span; amp = 1; reveal = sweep; }
+        else { const ph = ((el - 1.1) % 4) / 1.6; sweep = ph < 1 ? box.y1 + 10 - ph * span : -1e5; amp = 0.35; }
+        const map = coverMap(W, H, src.videoWidth || src.width, src.videoHeight || src.height);
+        view.render(W, H, box, { mask: true, xray: state.film, fade: state.fade, time: t, on: state.on, cam: map, sweep, sweepAmp: amp, reveal });
+        if (state.fade > 0.01) updateLabels(box, true, inMask); else { updateLabels(box, false); $('regionText').textContent = ''; state.caption.text = ''; }
       } else { updateLabels(box, false); $('regionText').textContent = ''; }
-      $('lock').style.display = state.xray && state.locked && now() - state.lastGood < 1500 ? 'block' : 'none';
+      $('lock').style.display = 'none';
+      $('hud').classList.toggle('locked', live);
+      const hl = live ? 'LOCKED' : 'SCANNING';
+      if ($('hudL').textContent !== hl) $('hudL').textContent = hl;
     } else if (state.mode === '3d' && state.model) {
       renderer.clear();
       pose3d(W, H);
-      view.render(W, H, { x0: -W / 2, x1: W / 2, y0: -H / 2, y1: H / 2 }, { mask: false, xray: state.film, fade: 1, time: t, cavity: false });
+      view.render(W, H, { x0: -W / 2, x1: W / 2, y0: -H / 2, y1: H / 2 }, { mask: false, xray: state.film, fade: 1, time: t, cavity: false, on: 1 });
       updateLabels({ x0: -W / 2 + 10, x1: W / 2 - 10, y0: -H / 2 + 110, y1: H / 2 - 70 }, true);
       $('lock').style.display = 'none';
     } else { renderer.clear(); updateLabels(windowBox(), false); }
@@ -378,20 +487,27 @@ function setMode(mode) {
   video.style.display = mode === 'cam' && !state.testSource ? 'block' : 'none';
   if (state.testSource) state.testSource.style.display = mode === 'cam' ? 'block' : 'none';
   c3d.style.display = 'block';
-  applyLayers(); syncButtons(); resize();
+  applyLayers(); syncButtons(); resize(); applyMirror();
   if (mode === 'cam') { startCamera(); ensureTrackers(); } else stopCamera();
 }
 function syncButtons() {
   $('xrayBtn').classList.toggle('on', state.xray);
   $('xrayBtn').textContent = state.xray ? 'X-RAY ON' : 'X-RAY';
-  $('styleBtn').textContent = state.film ? 'X-ray film' : 'Anatomy';
+  $('styleBtn').textContent = state.film ? 'X-ray' : 'Anatomy';
   $('layerBtn').textContent = LAYERS[state.layer].label;
+  $('hudR').textContent = LAYERS[state.layer].hud;
+  $('flipBtn').style.display = state.mode === 'cam' ? '' : 'none';
   $('labelBtn').classList.toggle('on', state.labels);
   $('box').style.display = state.mode === 'cam' && state.xray ? 'block' : 'none';
   for (const b of $('chips').children) b.classList.toggle('on', !!chips3d[b.dataset.kind]);
 }
 for (const b of document.querySelectorAll('#modes button')) b.onclick = () => setMode(b.dataset.mode);
-$('xrayBtn').onclick = () => { state.xray = !state.xray; if (!state.xray) { state.locked = false; state.flow.reset(); } syncButtons(); };
+$('xrayBtn').onclick = () => { state.xray = !state.xray; state.xrayAt = now(); if (!state.xray) resetTracking(); syncButtons(); };
+$('flipBtn').onclick = async () => {
+  if (state.testSource) { state.mirror = !state.mirror; applyMirror(); return; }
+  state.facing = state.facing === 'user' ? 'environment' : 'user';
+  resetTracking(); stopCamera(); await startCamera();
+};
 $('styleBtn').onclick = () => { state.film = !state.film; syncButtons(); };
 $('layerBtn').onclick = () => { state.layer = (state.layer + 1) % LAYERS.length; applyLayers(); syncButtons(); };
 $('labelBtn').onclick = () => { state.labels = !state.labels; syncButtons(); };
@@ -420,7 +536,7 @@ window.addEventListener('resize', resize);
 
 window.__xrv = {
   state, view, setMode, THREE, windowBox,
-  useTestSource(el) { el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none'; stage.insertBefore(el, c3d); state.testSource = el; state.camOn = false; if (state.mode === 'cam') { video.style.display = 'none'; el.style.display = 'block'; startCamera(); } },
+  useTestSource(el) { el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none'; stage.insertBefore(el, c3d); state.testSource = el; state.camOn = false; state.camError = ''; resetTracking(); if (state.mode === 'cam') { video.style.display = 'none'; el.style.display = 'block'; startCamera(); } },
 };
 resize();
 setMode('cam');

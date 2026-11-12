@@ -13,6 +13,7 @@
   #stage { position:fixed; inset:0; touch-action:none; background:#000; }
   #video, #c2d, #c3d { position:absolute; inset:0; width:100%; height:100%; display:none; }
   #video { object-fit:cover; }
+  #stage.mirror > video, #stage.mirror > canvas { transform:scaleX(-1); }
   button { font:inherit; color:var(--text); background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:7px 13px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
   button.on { background:var(--accent); border-color:var(--accent); color:#03131d; font-weight:600; }
   #top { position:fixed; top:0; left:0; right:0; z-index:6; display:flex; align-items:center; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 10px 8px; pointer-events:none; }
@@ -30,7 +31,11 @@
   #box .tr { right:-2px; top:-2px; border-left:0; border-bottom:0; border-top-right-radius:10px; }
   #box .bl { left:-2px; bottom:-2px; border-right:0; border-top:0; border-bottom-left-radius:10px; }
   #box .br { right:-2px; bottom:-2px; border-left:0; border-top:0; border-bottom-right-radius:10px; }
-  #box .edge { position:absolute; inset:0; border:1px solid #6fd0ff55; border-radius:10px; }
+  #box .edge { position:absolute; inset:0; border:1px solid #6fd0ff55; border-radius:10px; box-shadow:0 0 0 200vmax rgba(0,6,12,.42), inset 0 0 18px #6fd0ff22; }
+  #hud { position:absolute; left:10px; right:10px; top:8px; display:flex; justify-content:space-between; font:600 10px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing:.12em; color:#9fe2ff; text-shadow:0 0 6px #6fd0ffaa; }
+  #hud b { display:inline-block; width:6px; height:6px; border-radius:50%; background:#6fd0ff; margin-right:6px; vertical-align:1px; box-shadow:0 0 6px #6fd0ff; animation:blink 1s steps(2) infinite; }
+  #hud.locked b { background:#7dffb0; box-shadow:0 0 6px #7dffb0; animation:none; }
+  @keyframes blink { 50% { opacity:.2; } }
   #region { position:absolute; left:0; right:0; top:100%; margin-top:10px; text-align:center; }
   #region span { display:inline-block; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:14px; font-weight:600; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
   #region span:empty { display:none; }
@@ -45,7 +50,7 @@
   #lock { position:fixed; left:12px; top:calc(58px + env(safe-area-inset-top)); z-index:5; font-size:12px; color:var(--dim); text-shadow:0 1px 3px #000; display:none; }
   #lock b { color:#7dffb0; }
 
-  #dock { position:fixed; left:0; right:0; bottom:calc(18px + env(safe-area-inset-bottom)); z-index:6; display:none; align-items:center; justify-content:center; gap:14px; }
+  #dock { position:fixed; left:0; right:0; bottom:calc(30px + env(safe-area-inset-bottom)); z-index:6; display:none; align-items:center; justify-content:center; gap:14px; }
   #xrayBtn { width:74px; height:74px; border-radius:50%; padding:0; font-size:12px; font-weight:700; letter-spacing:.02em; border:3px solid #ffffffcc; background:#ffffff22; }
   #xrayBtn.on { background:var(--accent); color:#03131d; border-color:#fff; box-shadow:0 0 22px #6fd0ffaa; }
   #styleBtn, #layerBtn { font-size:13px; min-width:100px; }
@@ -80,7 +85,7 @@
   <canvas id="c3d"></canvas>
 </div>
 
-<div id="box"><div class="edge"></div><div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div><div id="region"><span id="regionText"></span></div></div>
+<div id="box"><div class="edge"></div><div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div><div id="hud"><span><b></b><span id="hudL">SCANNING</span></span><span id="hudR"></span></div><div id="region"><span id="regionText"></span></div></div>
 <div id="labels"></div>
 
 <div id="top">
@@ -90,15 +95,16 @@
   </div>
   <div id="title"></div>
   <button id="labelBtn" class="on" style="font-size:13px">Labels</button>
+  <button id="flipBtn" aria-label="Switch camera" style="padding:6px 10px;line-height:0"><svg width="22" height="20" viewBox="0 0 24 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-3h8l2 3h3v12H3z"/><path d="M8.5 13a3.6 3.6 0 0 1 6.3-2.4M15.5 13a3.6 3.6 0 0 1-6.3 2.4"/><path d="M15 8.5v2.2h-2.2M9 17.5v-2.2h2.2"/></svg></button>
 </div>
 
 <div id="hint" class="off"><span id="hintText"></span></div>
 <div id="lock"><b>●</b> Locked on</div>
 
 <div id="dock">
-  <button id="styleBtn">Anatomy</button>
+  <button id="styleBtn">X-ray</button>
   <button id="xrayBtn">X-RAY</button>
-  <button id="layerBtn">All layers</button>
+  <button id="layerBtn">Bone only</button>
 </div>
 <div id="credit">Anatomy: BodyParts3D, © DBCLS, CC BY 4.0. A reference body, not your own. For learning, not diagnosis.</div>
 
